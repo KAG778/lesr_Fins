@@ -1,0 +1,72 @@
+# Environment variables and API keys
+.env
+**/.env
+**/api_key*.py
+api_keys*.py
+
+# Data files
+data/
+**/data/*.csv
+**/data/*.pkl
+**/data/*.pt
+**/data/*.pth
+**/data/*.h5
+**/data/*.hdf5
+**/.cache/
+
+# Results and outputs
+results/
+**/results/*.pkl
+**/results/*.log
+*.log
+
+# Model weights
+*.pth
+*.pt
+*.pkl
+
+# Large data files
+*.csv
+*.h5
+*.hdf5
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Images (optional, keep if needed for documentation)
+# *.png
+# *.jpg
+# *.jpeg
