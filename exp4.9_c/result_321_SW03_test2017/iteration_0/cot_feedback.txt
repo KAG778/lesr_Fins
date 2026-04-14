@@ -1,0 +1,458 @@
+
+Training results for 5 regime-aware strategies:
+
+========== Code Candidate -- 1 ==========
+import numpy as np
+
+def revise_state(s):
+    # s: 120d raw state
+    closing_prices = s[0::6]  # Extract closing prices
+    n = len(closing_prices)
+    
+    # Feature 1: Price Momentum (last day change)
+    if n > 1:
+        price_momentum = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] if closing_prices[-2] != 0 else 0
+    else:
+        price_momentum = 0
+    
+    # Feature 2: Volatility (standard deviation of closing prices)
+    volatility = np.std(closing_prices[-5:])  # Last 5 days
+    if n < 5:
+        volatility = np.std(closing_prices) if n > 0 else 0
+    
+    # Feature 3: Relative Strength Index (RSI)
+    delta = np.diff(closing_prices)
+    gain = np.where(delta > 0, delta, 0)
+    loss = np.where(delta < 0, -delta, 0)
+    
+    avg_gain = np.mean(gain[-14:]) if len(gain) >= 14 else np.mean(gain) if len(gain) > 0 else 0
+    avg_loss = np.mean(loss[-14:]) if len(loss) >= 14 else np.mean(loss) if len(loss) > 0 else 0
+    
+    if avg_loss == 0:
+        rsi = 100 if avg_gain > 0 else 0
+    else:
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+    
+    features = [price_momentum, volatility, rsi]
+    return np.array(features)
+
+def intrinsic_reward(enhanced_s):
+    # enhanced_s[0:120] = raw state
+    # enhanced_s[120:123] = regime_vector
+    # enhanced_s[123:] = your features
+    regime = enhanced_s[120:123]
+    trend_direction = regime[0]
+    volatility_level = regime[1]
+    risk_level = regime[2]
+    
+    reward = 0.0
+    
+    # Priority 1 — RISK MANAGEMENT
+    if risk_level > 0.7:
+        if enhanced_s[123] > 0:  # BUY-aligned features
+            return np.random.uniform(-50, -30)  # Strong negative for buy
+        else:  # SELL-aligned features
+            return np.random.uniform(5, 10)  # Mild positive for sell
+
+    if risk_level > 0.4:
+        if enhanced_s[123] > 0:  # BUY-aligned features
+            return np.random.uniform(-20, -10)  # Moderate negative for buy
+
+    # Priority 2 — TREND FOLLOWING
+    if abs(trend_direction) > 0.3 and risk_level < 0.4:
+        if trend_direction > 0.3 and enhanced_s[123] > 0:  # Upward features
+            reward += 10  # Positive for upward features
+        elif trend_direction < -0.3 and enhanced_s[123] < 0:  # Downward features
+            reward += 10  # Positive for downward features
+
+    # Priority 3 — SIDEWAYS / MEAN REVERSION
+    if abs(trend_direction) < 0.3 and risk_level < 0.3:
+        if enhanced_s[123] > 0:  # Oversold (buy)
+            reward += 10
+        elif enhanced_s[123] < 0:  # Overbought (sell)
+            reward += 10
+
+    # Priority 4 — HIGH VOLATILITY
+    if volatility_level > 0.6 and risk_level < 0.4:
+        reward *= 0.5  # Reduce reward magnitude by 50%
+
+    return reward
+Performance:
+  Sharpe Ratio: 0.560
+  Max Drawdown: 41.66%
+  Total Return: 34.06%
+
+Top features (importance):
+  feature_0: 0.266
+  feature_2: 0.259
+  feature_1: 0.231
+
+Worst trades (biggest losses):
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+
+========== Code Candidate -- 2 ==========
+import numpy as np
+
+def revise_state(s):
+    # s: 120d raw state (20 days of OHLCV data)
+    closing_prices = s[0:120:6]  # Extract closing prices
+    volumes = s[4:120:6]          # Extract trading volumes
+
+    # Feature 1: Price change from the previous day
+    price_change = np.zeros(19)  # Only 19 changes for 20 days
+    for i in range(1, 20):
+        if closing_prices[i - 1] != 0:
+            price_change[i - 1] = (closing_prices[i] - closing_prices[i - 1]) / closing_prices[i - 1]
+        else:
+            price_change[i - 1] = 0  # Handle division by zero
+
+    # Feature 2: Volume change from the previous day
+    volume_change = np.zeros(19)  # Only 19 changes for 20 days
+    for i in range(1, 20):
+        if volumes[i - 1] != 0:
+            volume_change[i - 1] = (volumes[i] - volumes[i - 1]) / volumes[i - 1]
+        else:
+            volume_change[i - 1] = 0  # Handle division by zero
+
+    # Feature 3: 5-day moving average of closing prices
+    moving_average = np.zeros(20)
+    for i in range(4, 20):
+        moving_average[i] = np.mean(closing_prices[i-4:i+1])  # Average of last 5 days
+
+    # Concatenate features
+    features = np.concatenate((price_change, volume_change, moving_average))
+    return features
+
+def intrinsic_reward(enhanced_state):
+    # enhanced_state[0:120] = raw state
+    # enhanced_state[120:123] = regime_vector
+    # enhanced_state[123:] = your features
+    regime = enhanced_state[120:123]
+    trend_direction = regime[0]
+    volatility_level = regime[1]
+    risk_level = regime[2]
+
+    reward = 0.0
+
+    # Priority 1 — RISK MANAGEMENT
+    if risk_level > 0.7:
+        reward = np.random.uniform(-50, -30)  # Strong negative reward for BUY-aligned features
+        return reward
+    if risk_level > 0.4:
+        reward += np.random.uniform(-10, -5)  # Moderate negative reward for BUY signals
+
+    # Priority 2 — TREND FOLLOWING
+    if abs(trend_direction) > 0.3 and risk_level < 0.4:
+        # Assuming we have features that indicate upward/downward alignment
+        if trend_direction > 0.3:
+            reward += 10  # Positive reward for correct bullish signals
+        else:
+            reward += 10  # Positive reward for correct bearish signals
+
+    # Priority 3 — SIDEWAYS / MEAN REVERSION
+    if abs(trend_direction) < 0.3 and risk_level < 0.3:
+        # Here we would ideally check for mean reversion features
+        reward += 5  # Reward for mean-reversion features
+
+    # Priority 4 — HIGH VOLATILITY
+    if volatility_level > 0.6 and risk_level < 0.4:
+        reward *= 0.5  # Reduce reward magnitude by 50%
+
+    return float(reward)
+Performance:
+  Sharpe Ratio: 0.877
+  Max Drawdown: 23.05%
+  Total Return: 42.14%
+
+Top features (importance):
+  feature_18: 0.179
+  feature_17: 0.147
+  feature_16: 0.145
+
+Worst trades (biggest losses):
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+
+========== Code Candidate -- 3 ==========
+import numpy as np
+
+def revise_state(s):
+    # s: 120d raw state
+    closing_prices = s[0::6]  # Extract closing prices (every 6th element starting from index 0)
+    opening_prices = s[1::6]  # Extract opening prices (every 6th element starting from index 1)
+    volumes = s[4::6]         # Extract volumes (every 6th element starting from index 4)
+    
+    # Feature 1: Price Momentum (closing - opening)
+    price_momentum = closing_prices - opening_prices
+    
+    # Feature 2: Average Volume over the last 20 days
+    avg_volume = np.mean(volumes)
+    
+    # Feature 3: Volatility (standard deviation of closing prices)
+    volatility = np.std(closing_prices)
+
+    # Handle edge cases for features if necessary
+    # For average volume, we can check if the volume array is not empty
+    if np.isnan(avg_volume) or avg_volume == 0:
+        avg_volume = 1e-6  # Avoid division by zero in future calculations
+    if np.isnan(volatility):
+        volatility = 0.0  # If there is no variation, set volatility to 0
+
+    # Return only the new features as a 1D numpy array
+    features = [price_momentum[-1], avg_volume, volatility]  # We use the most recent price momentum
+    return np.array(features)
+
+def intrinsic_reward(enhanced_s):
+    # enhanced_s[0:120] = raw state
+    # enhanced_s[120:123] = regime_vector
+    # enhanced_s[123:] = your features
+    regime = enhanced_s[120:123]
+    trend_direction = regime[0]
+    volatility_level = regime[1]
+    risk_level = regime[2]
+    
+    reward = 0.0
+    
+    # Priority 1 — RISK MANAGEMENT
+    if risk_level > 0.7:
+        # STRONG NEGATIVE reward for BUY-aligned features
+        reward += -40  # Example strong negative penalty for buying in high-risk
+        # MILD POSITIVE reward for SELL-aligned features
+        reward += 7  # Example mild positive for selling in high-risk
+        return reward
+    
+    if risk_level > 0.4:
+        # Moderate negative reward for BUY signals
+        reward += -15  # Example moderate penalty for buying in elevated risk
+        return reward
+    
+    # Priority 2 — TREND FOLLOWING
+    if abs(trend_direction) > 0.3 and risk_level < 0.4:
+        if trend_direction > 0.3:
+            reward += 10  # Positive reward for upward trend
+        elif trend_direction < -0.3:
+            reward += 10  # Positive reward for downward trend (correct bearish bet)
+        return reward
+    
+    # Priority 3 — SIDEWAYS / MEAN REVERSION
+    if abs(trend_direction) < 0.3 and risk_level < 0.3:
+        # Example conditions for mean-reversion rewards
+        reward += 5  # Example positive for mean-reversion features
+        return reward
+
+    # Priority 4 — HIGH VOLATILITY
+    if volatility_level > 0.6 and risk_level < 0.4:
+        reward *= 0.5  # Reduce reward magnitude by 50%
+
+    return reward
+Performance:
+  Sharpe Ratio: 0.330
+  Max Drawdown: 22.23%
+  Total Return: 10.85%
+
+Top features (importance):
+  feature_0: 0.220
+  feature_2: 0.197
+  feature_1: 0.189
+
+Worst trades (biggest losses):
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+
+========== Code Candidate -- 4 ==========
+import numpy as np
+
+def revise_state(s):
+    # s: 120d raw state
+    # Extracting OHLCV data
+    closing_prices = s[::6]  # Closing prices
+    opening_prices = s[1::6]  # Opening prices
+    high_prices = s[2::6]  # High prices
+    low_prices = s[3::6]  # Low prices
+    volumes = s[4::6]  # Trading volumes
+
+    # Feature 1: Daily Returns
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    avg_daily_return = np.mean(daily_returns) if len(daily_returns) > 0 else 0  # Average daily return
+
+    # Feature 2: Volatility (using standard deviation of returns)
+    volatility = np.std(daily_returns) if len(daily_returns) > 0 else 0  # Standard deviation of returns
+
+    # Feature 3: Price Momentum (difference between the latest and the earliest closing price)
+    price_momentum = closing_prices[-1] - closing_prices[0]  # Recent price movement
+
+    # Returning only the computed features
+    features = [avg_daily_return, volatility, price_momentum]
+    return np.array(features)
+
+def intrinsic_reward(enhanced_s):
+    # enhanced_s[0:120] = raw state
+    # enhanced_s[120:123] = regime_vector
+    # enhanced_s[123:] = your features
+    regime = enhanced_s[120:123]
+    trend_direction = regime[0]
+    volatility_level = regime[1]
+    risk_level = regime[2]
+    
+    features = enhanced_s[123:]
+    avg_daily_return = features[0]
+    volatility = features[1]
+    price_momentum = features[2]
+
+    # Initialize reward
+    reward = 0.0
+
+    # Priority 1 — RISK MANAGEMENT
+    if risk_level > 0.7:
+        if avg_daily_return > 0:  # BUY-aligned feature
+            reward = np.random.uniform(-50, -30)
+        else:  # SELL-aligned feature
+            reward = np.random.uniform(5, 10)
+    elif risk_level > 0.4:
+        if avg_daily_return > 0:  # BUY-aligned feature
+            reward = np.random.uniform(-20, -10)  # Moderate negative reward
+
+    # Priority 2 — TREND FOLLOWING
+    elif abs(trend_direction) > 0.3 and risk_level < 0.4:
+        if trend_direction > 0.3 and avg_daily_return > 0:  # Uptrend & positive return
+            reward = np.random.uniform(10, 20)  # Positive reward
+        elif trend_direction < -0.3 and avg_daily_return < 0:  # Downtrend & negative return
+            reward = np.random.uniform(10, 20)  # Positive reward
+
+    # Priority 3 — SIDEWAYS / MEAN REVERSION
+    elif abs(trend_direction) < 0.3 and risk_level < 0.3:
+        if avg_daily_return < 0:  # Oversold situation
+            reward = np.random.uniform(5, 15)  # Positive reward for buying
+        elif avg_daily_return > 0:  # Overbought situation
+            reward = np.random.uniform(5, 15)  # Positive reward for selling
+        else:
+            reward = np.random.uniform(-5, 5)  # Neutral reward
+
+    # Priority 4 — HIGH VOLATILITY
+    if volatility_level > 0.6 and risk_level < 0.4:
+        reward *= 0.5  # Reduce reward magnitude by 50% in high volatility
+
+    return float(reward)
+Performance:
+  Sharpe Ratio: 1.031
+  Max Drawdown: 21.94%
+  Total Return: 52.87%
+
+Top features (importance):
+  feature_0: 0.312
+  feature_2: 0.280
+  feature_1: 0.257
+
+Worst trades (biggest losses):
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+
+========== Code Candidate -- 5 ==========
+import numpy as np
+
+def revise_state(s):
+    # s: 120d raw state
+    # Return ONLY new features (NOT including s or regime)
+
+    # Extract closing prices from raw state
+    closing_prices = s[0::6]  # Every 6th element starting from index 0 (closing prices)
+    
+    # Feature 1: Daily Returns (percentage change)
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    daily_returns = np.concatenate(([0], daily_returns))  # Fill first element with 0 for shape compatibility
+
+    # Feature 2: 14-day Relative Strength Index (RSI)
+    window = 14
+    if len(closing_prices) < window:
+        rsi = np.zeros_like(closing_prices)
+    else:
+        deltas = np.diff(closing_prices)
+        gain = np.where(deltas > 0, deltas, 0)
+        loss = np.where(deltas < 0, -deltas, 0)
+        avg_gain = np.convolve(gain, np.ones(window)/window, mode='valid')
+        avg_loss = np.convolve(loss, np.ones(window)/window, mode='valid')
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        rsi = np.concatenate(([0]*window, rsi))  # Prepend zeros for the first 'window' days
+
+    # Feature 3: 20-day Moving Average (MA)
+    ma = np.convolve(closing_prices, np.ones(20)/20, mode='valid')
+    ma = np.concatenate(([0]*19, ma))  # Prepend zeros for the first '19' days
+
+    # Return computed features
+    features = np.array([daily_returns, rsi, ma]).T.flatten()
+    return features
+
+def intrinsic_reward(enhanced_state):
+    # enhanced_state[0:120] = raw state
+    # enhanced_state[120:123] = regime_vector
+    # enhanced_state[123:] = your features
+    
+    regime = enhanced_state[120:123]
+    trend_direction = regime[0]
+    volatility_level = regime[1]
+    risk_level = regime[2]
+    features = enhanced_state[123:]
+
+    reward = 0.0
+
+    # RISK MANAGEMENT (Priority 1)
+    if risk_level > 0.7:
+        if features[0] > 0:  # Assuming first feature is aligned with BUY
+            reward = -40  # Strong negative for risky BUY
+        else:
+            reward = 10  # Mild positive for SELL
+    elif risk_level > 0.4:
+        if features[0] > 0:  # BUY signal
+            reward = -10  # Moderate negative for risky BUY
+
+    # TREND FOLLOWING (Priority 2)
+    elif abs(trend_direction) > 0.3 and risk_level < 0.4:
+        if trend_direction > 0.3 and features[0] > 0:  # BUY aligned with uptrend
+            reward += 20  # Positive reward for correct trend-following
+        elif trend_direction < -0.3 and features[0] < 0:  # SELL aligned with downtrend
+            reward += 20  # Positive reward for correct bearish bet
+
+    # SIDEWAYS / MEAN REVERSION (Priority 3)
+    elif abs(trend_direction) < 0.3 and risk_level < 0.3:
+        if features[0] < 0:  # Assuming first feature is SELL aligned
+            reward += 15  # Reward mean-reversion selling
+        elif features[0] > 0:  # Assuming first feature is BUY aligned
+            reward -= 15  # Penalize breakout-chasing
+
+    # HIGH VOLATILITY (Priority 4)
+    if volatility_level > 0.6 and risk_level < 0.4:
+        reward *= 0.5  # Reduce reward magnitude by 50%
+
+    return float(np.clip(reward, -100, 100))  # Ensure reward is within the specified range
+Performance:
+  Sharpe Ratio: 1.196
+  Max Drawdown: 17.38%
+  Total Return: 62.41%
+
+Top features (importance):
+  feature_58: 0.161
+  feature_54: 0.095
+  feature_57: 0.091
+
+Worst trades (biggest losses):
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+  Day 140: BUY → -25.0%, regime=[trend=0.87, vol=0.22, risk=0.36]
+
+
+
+Please analyze and improve:
+
+1. Do the features properly adapt to different regimes (trend/sideways/crisis)?
+2. Does intrinsic_reward correctly implement the priority chain (risk > trend > sideways)?
+3. Which features help avoid the worst trades?
+4. Suggest specific new features that could prevent the largest losses.
+
+Goal: Improve Sharpe ratio across ALL regimes, especially reduce crisis-period losses.

@@ -1,0 +1,49 @@
+data:
+  pickle_file: data/finmem_data/stock_data_4stocks_2019_2023.pkl
+experiment:
+  tickers:
+  - TSLA
+  - NFLX
+  - AMZN
+  - MSFT
+  train_period:
+  - '2019-01-01'
+  - '2021-12-31'
+  val_period:
+  - '2022-01-01'
+  - '2022-12-31'
+  test_period:
+  - '2023-01-01'
+  - '2023-12-31'
+  sample_count: 6
+  max_iterations: 3
+  init_min_valid: 3
+  init_max_rounds: 5
+llm:
+  model: gpt-4o-mini
+  temperature: 0.7
+  max_tokens: 2000
+  base_url: https://api.chatanywhere.com.cn/v1
+  api_key: sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL
+dqn:
+  state_dim: 120
+  action_dim: 3
+  hidden_dim: 256
+  batch_size: 64
+  gamma: 0.99
+  tau: 0.005
+  lr: 0.001
+  epsilon_start: 1.0
+  epsilon_end: 0.1
+  epsilon_decay: 0.995
+  max_episodes: 50
+intrinsic:
+  weight: 0.02
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  min_commission: 0.99
+output:
+  output_dir: exp4.9_c/result_SW09_test2023
+  log_dir: logs
+  save_results: true

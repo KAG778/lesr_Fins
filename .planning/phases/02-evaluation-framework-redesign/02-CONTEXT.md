@@ -24,6 +24,11 @@ Redesign training/validation/testing to prevent leakage and enable robust multi-
 ### Multi-Metric Assessment (EVAL-02)
 - **D-05:** Extend DQNTrainer.evaluate() to compute Sharpe, Sortino, Max Drawdown, Calmar ratio, Win Rate. Current evaluate() only returns Sharpe/MaxDD/TotalReturn
 
+### Factor Evaluation Metrics (新增 — 金融因子评估维度)
+- **D-11:** metrics.py 除策略绩效指标外，还应包含**因子评估指标**：IC（Information Coefficient，因子值与未来收益的秩相关）、IR（Information Ratio，IC均值/IC标准差）、Quantile Spread（因子 Top 组 vs Bottom 组的收益差）。这些指标评估的是单个特征/因子的预测能力，而非策略整体绩效
+- **D-12:** evaluate() 在返回策略绩效的同时，也返回每个特征维度的因子评估结果（IC, IR, quantile_spread per feature），使得 Phase 3 的特征筛选（LESR-04）有直接的量化依据
+- **D-13:** 论文叙事中，"LLM 生成的特征具有显著 IC" 比 "LLM 策略 Sharpe 更高" 更有说服力——因子评估是核心学术贡献之一
+
 ### Data Leakage Prevention (EVAL-03)
 - **D-06:** COT feedback must only use training-set analysis. Verify that _generate_cot_feedback() and get_iteration_prompt() do not pass validation/test metrics to LLM
 
@@ -87,6 +92,8 @@ Redesign training/validation/testing to prevent leakage and enable robust multi-
 - New `llm_feature_selector.py` needed — parses LLM JSON output, calls feature library
 - `prompts.py` needs rewrite — from "generate Python code" to "select from feature library"
 - `dqn_trainer.py` evaluate() needs extension — add Sortino, Calmar, Win Rate
+- `metrics.py` 需要包含因子评估函数 — IC (spearman rank corr), IR (IC mean / IC std), quantile_spread — 这些是 numpy/scipy 操作，不需要外部依赖
+- evaluate() 返回 dict 需要新增 `factor_metrics` 键 — 包含每个特征的 IC/IR/quantile_spread
 
 </code_context>
 
@@ -96,6 +103,10 @@ Redesign training/validation/testing to prevent leakage and enable robust multi-
 - Fixed reward should extend current `compute_regime_bonus()` (only 2 rules now) to ~5-6 rules covering risk management, trend following, and volatility dampening
 - Feature library should normalize all outputs to [0,1] or z-scored to prevent scale mismatch
 - LLM rationale field is important for paper writing — captures the "why" behind each feature selection
+- IC 计算用 Spearman 秩相关（`scipy.stats.spearmanr`），不用 Pearson，因为金融因子和收益的关系经常是非线性的
+- IR = mean(IC) / std(IC)，需要 rolling IC 先算出 IC 序列（默认 window=20 天），再取均值和标准差
+- Quantile Spread: 将特征值排序分成 5 组，计算 Top 组 vs Bottom 组的下期收益差
+- 因子评估函数签名建议：`ic(feature_values, forward_returns, method='spearman') -> float`、`rolling_ic(feature_values, forward_returns, window=20) -> np.ndarray`、`information_ratio(rolling_ic_series) -> float`、`quantile_spread(feature_values, forward_returns, n_quantiles=5) -> float`
 
 </specifics>
 
