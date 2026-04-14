@@ -12,7 +12,7 @@ This roadmap transforms the LESR financial trading project from an unstable prot
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Diagnosis Infrastructure** - Build tools to run, collect, and statistically analyze LESR vs DQN experiments
+- [x] **Phase 1: Diagnosis Infrastructure** - Build tools to run, collect, and statistically analyze LESR vs DQN experiments
 - [ ] **Phase 2: Evaluation Framework Redesign** - Redesign training/validation/testing to prevent leakage and enable robust multi-dimensional assessment
 - [ ] **Phase 3: LESR Core Improvements** - Fix prompts, quality gates, COT feedback, and feature selection to stabilize LESR performance
 
@@ -38,6 +38,7 @@ Plans:
 ### Phase 2: Evaluation Framework Redesign
 **Goal**: Strategy evaluation is methodologically sound with walk-forward validation, multi-metric assessment, leakage prevention, and market-regime awareness
 **Depends on**: Phase 1 (diagnostic tools provide the measurement foundation)
+**Baseline code**: exp4.9_c (Regime Detection, framework-level state assembly, safe reward, strict validation, worst-trade COT feedback)
 **Requirements**: EVAL-01, EVAL-02, EVAL-03, EVAL-04, EVAL-05
 **Success Criteria** (what must be TRUE):
   1. Researcher can run walk-forward rolling-window experiments that train and test on sequentially advancing time windows, producing out-of-sample results
@@ -45,16 +46,17 @@ Plans:
   3. LLM iterative optimization feedback uses only training-set analysis, with no validation or test set information leaking into the prompt context
   4. Researcher can inspect strategy performance broken down by market regime (bull/bear/sideways) to identify regime-dependent weaknesses
   5. Researcher can generate a cross-stock, cross-window, cross-run comparison report that aggregates results into publication-ready tables
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md -- Multi-metric evaluation module (EVAL-01, EVAL-02): metrics.py + extended evaluate()
+- [ ] 02-02-PLAN.md -- Leakage guard and regime-stratified evaluation (EVAL-03, EVAL-04)
+- [ ] 02-03-PLAN.md -- Cross-experiment aggregation and reporting (EVAL-05)
 
 ### Phase 3: LESR Core Improvements
 **Goal**: LLM-generated features are economically meaningful, syntactically valid, dimensionally correct, and consistently outperform raw features across runs
 **Depends on**: Phase 1 (diagnostic infrastructure to measure improvement), Phase 2 (robust evaluation to verify improvement is real)
+**Baseline code**: exp4.9_c (Regime Detection, framework-level state assembly, safe reward, strict validation, worst-trade COT feedback)
 **Requirements**: LESR-01, LESR-02, LESR-03, LESR-04, LESR-05
 **Success Criteria** (what must be TRUE):
   1. LLM prompts produce features with explicit economic rationale (e.g., momentum, mean-reversion, volatility regime), verifiable in the generated code comments
@@ -76,6 +78,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Diagnosis Infrastructure | 0/3 | Planned | - |
-| 2. Evaluation Framework Redesign | 0/3 | Not started | - |
+| 1. Diagnosis Infrastructure | 3/3 | Complete | 2026-04-14 |
+| 2. Evaluation Framework Redesign | 0/3 | Planned | - |
 | 3. LESR Core Improvements | 0/3 | Not started | - |
