@@ -36,21 +36,21 @@ Plans:
 - [x] 01-03-PLAN.md -- Run manager (DIAG-01), CLI entry point, and post-hoc analysis tool
 
 ### Phase 2: Evaluation Framework Redesign
-**Goal**: Strategy evaluation is methodologically sound with walk-forward validation, multi-metric assessment, leakage prevention, and market-regime awareness
+**Goal**: Strategy evaluation is methodologically sound with walk-forward validation, multi-metric assessment (including factor evaluation IC/IR/Quantile Spread), leakage prevention, and market-regime awareness
 **Depends on**: Phase 1 (diagnostic tools provide the measurement foundation)
 **Baseline code**: exp4.9_c (Regime Detection, framework-level state assembly, safe reward, strict validation, worst-trade COT feedback)
 **Requirements**: EVAL-01, EVAL-02, EVAL-03, EVAL-04, EVAL-05
 **Success Criteria** (what must be TRUE):
   1. Researcher can run walk-forward rolling-window experiments that train and test on sequentially advancing time windows, producing out-of-sample results
-  2. Researcher can view a multi-metric evaluation report covering Sharpe, Sortino, max drawdown, Calmar ratio, and win rate for any experiment run
+  2. Researcher can view a multi-metric evaluation report covering Sharpe, Sortino, max drawdown, Calmar ratio, and win rate, plus factor evaluation metrics (IC, IR, Quantile Spread) per feature dimension
   3. LLM iterative optimization feedback uses only training-set analysis, with no validation or test set information leaking into the prompt context
   4. Researcher can inspect strategy performance broken down by market regime (bull/bear/sideways) to identify regime-dependent weaknesses
   5. Researcher can generate a cross-stock, cross-window, cross-run comparison report that aggregates results into publication-ready tables
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Multi-metric evaluation module (EVAL-01, EVAL-02): metrics.py + extended evaluate()
-- [ ] 02-02-PLAN.md -- Leakage guard and regime-stratified evaluation (EVAL-03, EVAL-04)
+- [ ] 02-01-PLAN.md -- Metrics module with performance + factor evaluation metrics (EVAL-01, EVAL-02), extended evaluate() with factor_metrics
+- [ ] 02-02-PLAN.md -- Leakage guard (EVAL-03) and regime-stratified evaluation (EVAL-04)
 - [ ] 02-03-PLAN.md -- Cross-experiment aggregation and reporting (EVAL-05)
 
 ### Phase 3: LESR Core Improvements
