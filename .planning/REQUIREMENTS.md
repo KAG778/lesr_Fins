@@ -7,7 +7,7 @@
 
 ### 诊断工具（DIAG）
 
-- [ ] **DIAG-01**：系统可多次（≥10 次）独立运行 DQN baseline 和当前 LESR，收集统计样本
+- [x] **DIAG-01**：系统可多次（≥10 次）独立运行 DQN baseline 和当前 LESR，收集统计样本
 - [ ] **DIAG-02**：系统可自动对比 LESR vs DQN 的 Sharpe 比率差异，并计算统计显著性（t-test / bootstrap）
 - [ ] **DIAG-03**：系统可分析每次 LLM 生成特征的质量（方差、与收益的相关性、信息比）
 - [ ] **DIAG-04**：系统可分解不稳定性来源：LLM 采样波动 vs DQN 训练波动 vs 数据噪声

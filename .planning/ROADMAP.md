@@ -31,9 +31,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Test infrastructure, structured logger (DIAG-05), and feature quality (DIAG-03)
-- [ ] 01-02-PLAN.md -- Statistical comparison (DIAG-02) and variance decomposition (DIAG-04)
-- [ ] 01-03-PLAN.md -- Run manager (DIAG-01), CLI entry point, and post-hoc analysis tool
+- [x] 01-01-PLAN.md -- Test infrastructure, structured logger (DIAG-05), and feature quality (DIAG-03)
+- [x] 01-02-PLAN.md -- Statistical comparison (DIAG-02) and variance decomposition (DIAG-04)
+- [x] 01-03-PLAN.md -- Run manager (DIAG-01), CLI entry point, and post-hoc analysis tool
 
 ### Phase 2: Evaluation Framework Redesign
 **Goal**: Strategy evaluation is methodologically sound with walk-forward validation, multi-metric assessment, leakage prevention, and market-regime awareness
