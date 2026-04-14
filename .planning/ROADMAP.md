@@ -28,12 +28,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Researcher can inspect per-run LLM-generated feature quality metrics (variance, return correlation, information ratio) to identify bad samples
   4. Researcher can see a variance decomposition report attributing instability to LLM sampling, DQN training, or data noise
   5. Researcher can retrieve the complete configuration, LLM output code, training curves, and final metrics for any past run from structured logs
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Test infrastructure, structured logger (DIAG-05), and feature quality (DIAG-03)
+- [ ] 01-02-PLAN.md -- Statistical comparison (DIAG-02) and variance decomposition (DIAG-04)
+- [ ] 01-03-PLAN.md -- Run manager (DIAG-01), CLI entry point, and post-hoc analysis tool
 
 ### Phase 2: Evaluation Framework Redesign
 **Goal**: Strategy evaluation is methodologically sound with walk-forward validation, multi-metric assessment, leakage prevention, and market-regime awareness
@@ -76,6 +76,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Diagnosis Infrastructure | 0/3 | Not started | - |
+| 1. Diagnosis Infrastructure | 0/3 | Planned | - |
 | 2. Evaluation Framework Redesign | 0/3 | Not started | - |
 | 3. LESR Core Improvements | 0/3 | Not started | - |
