@@ -10,7 +10,7 @@ import sys
 import subprocess
 import yaml
 import json
-import hashlib
+import copy
 import logging
 import time
 from pathlib import Path
@@ -61,7 +61,7 @@ class RunManager:
 
         Returns path to the written config file.
         """
-        config = dict(self.base_config)  # shallow copy
+        config = copy.deepcopy(self.base_config)
         config['seed'] = seed
         config['output'] = config.get('output', {})
         config['output']['output_dir'] = str(run_dir)
@@ -148,11 +148,15 @@ class RunManager:
 
             # Launch subprocess
             logger.info(f"Launching {run_id} with seed={seed}")
+            stdout_fh = open(run_dir / 'stdout.log', 'w')
+            stderr_fh = open(run_dir / 'stderr.log', 'w')
             proc = subprocess.Popen(
                 cmd, env=env,
-                stdout=open(run_dir / 'stdout.log', 'w'),
-                stderr=open(run_dir / 'stderr.log', 'w'),
+                stdout=stdout_fh,
+                stderr=stderr_fh,
             )
+            stdout_fh.close()
+            stderr_fh.close()
             active_processes.append((proc, runs_info[-1]))
             runs_info[-1]['status'] = 'running'
 
