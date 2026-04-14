@@ -49,9 +49,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Metrics module (EVAL-02), extended evaluate() with factor_metrics, walk-forward compatibility verification (EVAL-01)
-- [ ] 02-02-PLAN.md -- Leakage guard (EVAL-03) and regime-stratified evaluation (EVAL-04)
-- [ ] 02-03-PLAN.md -- Cross-experiment aggregation and reporting (EVAL-05)
+- [x] 02-01-PLAN.md -- Metrics module (EVAL-02), extended evaluate() with factor_metrics, walk-forward compatibility verification (EVAL-01)
+- [x] 02-02-PLAN.md -- Leakage guard (EVAL-03) and regime-stratified evaluation (EVAL-04)
+- [x] 02-03-PLAN.md -- Cross-experiment aggregation and reporting (EVAL-05)
 
 ### Phase 3: LESR Core Improvements
 **Goal**: LLM-generated features are economically meaningful, syntactically valid, dimensionally correct, and consistently outperform raw features across runs
