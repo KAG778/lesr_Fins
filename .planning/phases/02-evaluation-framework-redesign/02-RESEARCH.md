@@ -372,22 +372,25 @@ def aggregate_cross_experiment(base_dir, pattern="result_SW*_test*"):
 
 **If this table is empty:** N/A -- 5 assumptions identified and documented.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where should the evaluation module live?**
    - What we know: New code needs a home. Options: `exp4.9_c/evaluation/` as a subpackage, or inline in existing files.
    - What's unclear: Whether a separate module is worth the import complexity given `sys.path` patterns.
    - Recommendation: Create `exp4.9_c/evaluation/` as a subpackage with `metrics.py`, `regime_evaluator.py`, `leakage_guard.py`. Keep it importable from `dqn_trainer.py` via sibling import. This matches the project's pattern of keeping related code together.
+   - RESOLVED: Plans 02-01 and 02-02 create `exp4.9_c/evaluation/` subpackage with all three modules.
 
 2. **Should evaluate() return regime-level daily returns for external aggregation?**
    - What we know: The current evaluate() returns a flat dict. Regime-stratified metrics add a nested dict.
    - What's unclear: Whether downstream consumers (sliding_summary.py, cross_report.py) need raw per-step data or just aggregated metrics.
    - Recommendation: Return both aggregated regime_metrics AND the raw daily_returns + regime_vectors lists. This lets aggregation scripts do their own grouping if needed.
+   - RESOLVED: Plan 02-01 Task 2 extends evaluate() to return daily_returns + regime_vectors alongside regime_metrics.
 
 3. **Format for publication-ready tables (EVAL-05)?**
    - What we know: Claude's discretion per CONTEXT.md. Current sliding_summary.py generates markdown tables.
    - What's unclear: Whether LaTeX format is needed for paper submission.
    - Recommendation: Generate markdown by default (consistent with existing pattern). Add optional `--format latex` flag to the cross-report script. LaTeX can be generated from the same DataFrame with `to_latex()`.
+   - RESOLVED: Plan 02-03 Task 1 implements generate_report() with format="markdown" default and format="latex" option.
 
 ## Environment Availability
 
