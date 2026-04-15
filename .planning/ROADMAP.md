@@ -56,7 +56,7 @@ Plans:
 ### Phase 3: LESR Core Improvements
 **Goal**: LLM-generated features are economically meaningful, syntactically valid, dimensionally correct, and consistently outperform raw features across runs
 **Depends on**: Phase 1 (diagnostic infrastructure to measure improvement), Phase 2 (robust evaluation to verify improvement is real)
-**Baseline code**: exp4.9_c (Regime Detection, framework-level state assembly, safe reward, strict validation, worst-trade COT feedback)
+**Baseline code**: exp4.15 (clean copy from exp4.9_c with Phase 2 evaluation infrastructure)
 **Requirements**: LESR-01, LESR-02, LESR-03, LESR-04, LESR-05
 **Success Criteria** (what must be TRUE):
   1. LLM prompts produce features with explicit economic rationale (e.g., momentum, mean-reversion, volatility regime), verifiable in the generated code comments
@@ -64,12 +64,12 @@ Plans:
   3. COT feedback to LLM contains only high-confidence analysis results and explicit "do not do X" negative guidance, verifiable by inspecting the rendered prompt
   4. The feature set passed to DQN is filtered to 5-10 non-degenerate features, with degenerate features (zero variance, constant value) automatically rejected
   5. Researcher can view feature stability scores showing how consistently each feature performs across different time sub-periods
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- Feature library: 20+ indicators in pure NumPy, INDICATOR_REGISTRY, closure-based assembler, Z-score normalization (LESR-01, LESR-02)
+- [ ] 03-02-PLAN.md -- Prompt rewrite (JSON mode), validation pipeline, feature screening (IC/variance gates), stability assessment across sub-periods (LESR-01, LESR-02, LESR-04, LESR-05)
+- [ ] 03-03-PLAN.md -- Controller integration (JSON-mode loop), COT feedback with negative guidance, fixed reward rules, leakage activation, lesr_strategy fix (LESR-01, LESR-03)
 
 ## Progress
 
@@ -79,5 +79,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Diagnosis Infrastructure | 3/3 | Complete | 2026-04-14 |
-| 2. Evaluation Framework Redesign | 0/3 | Planned | - |
-| 3. LESR Core Improvements | 0/3 | Not started | - |
+| 2. Evaluation Framework Redesign | 3/3 | Complete | 2026-04-15 |
+| 3. LESR Core Improvements | 0/3 | Planned | - |
