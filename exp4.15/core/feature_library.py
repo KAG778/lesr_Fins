@@ -761,3 +761,32 @@ def _dedup_by_base_indicator(selection: List[Dict],
             result.append(items[0])
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Validation Pipeline (D-05) -- STUB for TDD RED phase
+# ---------------------------------------------------------------------------
+
+def validate_selection(json_str: str, sample_state: np.ndarray) -> dict:
+    """STUB: Multi-stage validation of LLM JSON feature selection."""
+    raise NotImplementedError("STUB: validate_selection")
+
+
+# ---------------------------------------------------------------------------
+# Feature Screening (D-06, D-07, D-08) -- STUB for TDD RED phase
+# ---------------------------------------------------------------------------
+
+def screen_features(selection: list, revise_fn, training_states: np.ndarray,
+                    forward_returns: np.ndarray) -> dict:
+    """STUB: Screen features by IC/variance, dedup, rank."""
+    raise NotImplementedError("STUB: screen_features")
+
+
+# ---------------------------------------------------------------------------
+# Stability Assessment (D-14, D-15, D-16) -- STUB for TDD RED phase
+# ---------------------------------------------------------------------------
+
+def assess_stability(selection: list, revise_fn, training_states: np.ndarray,
+                     forward_returns: np.ndarray, n_periods: int = 4) -> dict:
+    """STUB: Sub-period IC stability assessment."""
+    raise NotImplementedError("STUB: assess_stability")
