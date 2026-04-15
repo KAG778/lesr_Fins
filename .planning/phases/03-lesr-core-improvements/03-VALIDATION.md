@@ -2,7 +2,7 @@
 phase: 03
 slug: lesr-core-improvements
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-15
 ---
@@ -38,15 +38,12 @@ created: 2026-04-15
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | LESR-01 | — | N/A | unit | `pytest tests/test_feature_library.py -x` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | LESR-01, LESR-02 | — | N/A | unit | `pytest tests/test_feature_library.py -x` | ❌ W0 | ⬜ pending |
-| 03-01-03 | 01 | 1 | LESR-04 | — | N/A | unit | `pytest tests/test_feature_library.py -x` | ❌ W0 | ⬜ pending |
-| 03-02-01 | 02 | 1 | LESR-01 | — | N/A | unit | `pytest tests/test_prompt_json_mode.py -x` | ❌ W0 | ⬜ pending |
-| 03-02-02 | 02 | 1 | LESR-03 | — | N/A | unit | `pytest tests/test_cot_feedback.py -x` | ❌ W0 | ⬜ pending |
-| 03-02-03 | 02 | 2 | LESR-03 | — | N/A | unit | `pytest tests/test_cot_feedback.py -x` | ❌ W0 | ⬜ pending |
-| 03-03-01 | 03 | 2 | LESR-04 | — | N/A | unit | `pytest tests/test_screening.py -x` | ❌ W0 | ⬜ pending |
-| 03-03-02 | 03 | 2 | LESR-05 | — | N/A | unit | `pytest tests/test_stability.py -x` | ❌ W0 | ⬜ pending |
-| 03-03-03 | 03 | 2 | LESR-02 | — | N/A | unit | `pytest tests/test_fixed_reward.py -x` | ❌ W0 | ⬜ pending |
+| 03-01-01 | 01 | 1 | LESR-01, LESR-02 | T-03-01, T-03-03 | Params clipped to ranges; no exec/eval | unit | `cd exp4.15 && pytest tests/test_feature_library.py -x` | ❌ W0 | ⬜ pending |
+| 03-01-02 | 01 | 1 | LESR-01, LESR-02 | T-03-02 | NaN/Inf guards on all indicators | unit | `cd exp4.15 && pytest tests/test_feature_library.py -x` | ❌ W0 | ⬜ pending |
+| 03-02-01 | 02 | 2 | LESR-01, LESR-03 | T-03-04 | Market stats from training data only; COT filtered | unit | `cd exp4.15 && pytest tests/test_prompts.py -x` | ❌ W0 | ⬜ pending |
+| 03-02-02 | 02 | 2 | LESR-02, LESR-04, LESR-05 | T-03-05, T-03-06 | Multi-stage validation; IC/variance gates; stability checks | unit | `cd exp4.15 && pytest tests/test_validation.py tests/test_screening.py tests/test_stability.py -x` | ❌ W0 | ⬜ pending |
+| 03-03-01 | 03 | 3 | LESR-02 | — | Fixed reward replaces LLM-generated reward | unit | `cd exp4.15 && pytest tests/ -x -q` | ❌ W0 | ⬜ pending |
+| 03-03-02 | 03 | 3 | LESR-01, LESR-03 | T-03-07, T-03-09, T-03-11 | Leakage check active; JSON mode end-to-end | unit | `cd exp4.15 && pytest tests/test_controller_integration.py -x` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -54,15 +51,13 @@ created: 2026-04-15
 
 ## Wave 0 Requirements
 
-- [ ] `exp4.15/tests/test_feature_library.py` — stubs for LESR-01, LESR-02, LESR-04
-- [ ] `exp4.15/tests/test_prompt_json_mode.py` — stubs for LESR-01
-- [ ] `exp4.15/tests/test_cot_feedback.py` — stubs for LESR-03
-- [ ] `exp4.15/tests/test_screening.py` — stubs for LESR-04
-- [ ] `exp4.15/tests/test_stability.py` — stubs for LESR-05
-- [ ] `exp4.15/tests/test_fixed_reward.py` — stubs for LESR-02
+- [ ] `exp4.15/tests/test_feature_library.py` — stubs for LESR-01, LESR-02 (Plan 01 Tasks 1+2)
+- [ ] `exp4.15/tests/test_prompts.py` — stubs for LESR-01, LESR-03 (Plan 02 Task 1)
+- [ ] `exp4.15/tests/test_validation.py` — stubs for LESR-02 (Plan 02 Task 2)
+- [ ] `exp4.15/tests/test_screening.py` — stubs for LESR-04 (Plan 02 Task 2)
+- [ ] `exp4.15/tests/test_stability.py` — stubs for LESR-05 (Plan 02 Task 2)
+- [ ] `exp4.15/tests/test_controller_integration.py` — stubs for LESR-01, LESR-03 (Plan 03 Task 2)
 - [ ] `exp4.15/tests/conftest.py` — shared fixtures for feature data, mock LLM responses
-
-*If none: "Existing infrastructure covers all phase requirements."*
 
 ---
 
@@ -73,17 +68,15 @@ created: 2026-04-15
 | LLM prompt quality and economic rationale | LESR-01 | Requires LLM judgment | Inspect rendered prompt for market stats and theme pack guidance |
 | Stability report readability | LESR-05 | Subjective quality | View generated stability_report.json, verify IC table is human-readable |
 
-*If none: "All phase behaviors have automated verification."*
-
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
