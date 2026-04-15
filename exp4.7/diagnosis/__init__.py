@@ -1,1 +1,0 @@
-# LESR Diagnosis Framework
