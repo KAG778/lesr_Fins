@@ -4,7 +4,7 @@ DQN Trainer for Exp4.15
 Key changes from 4.7:
 - extract_state also computes regime_vector (3d)
 - Framework prepends raw+regime to LLM features (dimension guaranteed)
-- regime_bonus: soft reward for risk-aware actions
+- compute_fixed_reward: 5 fixed rules replacing LLM-generated intrinsic_reward (D-22)
 - Tracks worst trades for COT feedback
 - DQN network architecture UNCHANGED
 """
@@ -78,24 +78,25 @@ class DQN(nn.Module):
 class DQNTrainer:
     """
     DQN Trainer with regime conditioning.
-    
+
     Key design: LLM's revise_state returns ONLY new features.
     Framework prepends raw_state(120) + regime_vector(3) automatically.
+
+    Fixed reward rules (D-22, D-23) replace LLM-generated intrinsic_reward.
     """
 
     def __init__(
         self,
         ticker: str,
         revise_state_func: Callable,
-        intrinsic_reward_func: Callable,
         state_dim: int,
+        intrinsic_reward_func: Callable = None,  # DEPRECATED -- kept for backward compat only
         intrinsic_weight: float = 0.02,
         regime_bonus_weight: float = 0.01,
         device: str = None
     ):
         self.ticker = ticker
         self.revise_state = revise_state_func    # returns only new features
-        self.intrinsic_reward = intrinsic_reward_func
         self.intrinsic_weight = intrinsic_weight
         self.regime_bonus_weight = regime_bonus_weight
 
@@ -183,18 +184,60 @@ class DQNTrainer:
 
     def compute_regime_bonus(self, regime_vector, action):
         """
-        Framework-layer regime bonus: soft reward for risk-aware actions.
-        Only 2 rules, conservative:
-          1. High risk + SELL → positive (encourage stop-loss)
-          2. Extreme risk + BUY → negative (discourage entry)
+        DEPRECATED: Use compute_fixed_reward instead.
+        Kept for backward compatibility with existing code.
         """
-        risk_level = regime_vector[2]
+        return self.compute_fixed_reward(regime_vector, action, np.array([]))
 
-        if risk_level > 0.6 and action == 1:   # SELL during elevated risk
-            return 5.0
-        if risk_level > 0.85 and action == 0:   # BUY during extreme risk
-            return -5.0
-        return 0.0
+    def compute_fixed_reward(self, regime_vector, action, features):
+        """Fixed reward rules replacing LLM-generated intrinsic_reward (D-22).
+
+        5 rules: risk management, trend following, volatility dampening,
+        momentum protection, mean reversion support.
+        Weights: intrinsic_weight=0.02, regime_bonus_weight=0.01 (D-23).
+
+        Args:
+            regime_vector: 3D array [trend, vol, risk].
+            action: int (0=BUY, 1=SELL, 2=HOLD).
+            features: 1D array of LLM feature values (after raw+regime offset).
+
+        Returns:
+            float: clipped reward in [-10.0, 10.0].
+        """
+        trend, vol, risk = float(regime_vector[0]), float(regime_vector[1]), float(regime_vector[2])
+        reward = 0.0
+
+        # Rule 1: Risk Management (highest priority)
+        if risk > 0.7:
+            if action == 0:    # BUY in crisis
+                reward -= 5.0
+            elif action == 1:  # SELL (stop-loss)
+                reward += 2.0
+        elif risk > 0.4:
+            if action == 0:    # Mild discouragement for BUY
+                reward -= 1.0
+
+        # Rule 2: Trend Following
+        if abs(trend) > 0.3 and risk < 0.4:
+            if (trend > 0.3 and action == 0) or (trend < -0.3 and action == 1):
+                reward += 1.5  # Aligned with trend
+
+        # Rule 3: Volatility Dampening
+        if vol > 0.7 and risk < 0.4:
+            reward *= 0.5  # Reduce all reward magnitude in uncertain market
+
+        # Rule 4: Momentum Protection (feature-based)
+        if len(features) > 0 and action == 0:
+            # Penalize buying when momentum features are negative
+            reward += float(np.clip(np.mean(features[:3]) * 0.5, -1.0, 1.0))
+
+        # Rule 5: Mean Reversion Support
+        if abs(trend) < 0.3 and vol < 0.3 and risk < 0.3:
+            if action == 0 and len(features) > 0:
+                # Encourage buying in calm sideways market with oversold signals
+                reward += 0.5
+
+        return float(np.clip(reward, -10.0, 10.0))
 
     def _get_cached_state(self, data_loader, date):
         date_str = str(date)
@@ -248,15 +291,11 @@ class DQNTrainer:
                     next_price = data_loader.get_ticker_price_by_date(self.ticker, next_date)
                     extrinsic_r = (next_price - current_price) / current_price if current_price > 0 else 0
 
-                    # Intrinsic reward (LLM-generated)
-                    intrinsic_r = self.intrinsic_reward(enhanced)
+                    # Fixed reward (D-22): replaces LLM-generated intrinsic_reward
+                    features = enhanced[123:]  # features start after raw(120) + regime(3)
+                    fixed_r = self.compute_fixed_reward(regime_vector, action, features)
 
-                    # Regime bonus (framework-layer)
-                    regime_r = self.compute_regime_bonus(regime_vector, action)
-
-                    total_reward = (extrinsic_r
-                                   + self.intrinsic_weight * intrinsic_r
-                                   + self.regime_bonus_weight * regime_r)
+                    total_reward = extrinsic_r + self.intrinsic_weight * fixed_r
 
                     next_enhanced = self._get_cached_state(data_loader, next_date)
                     if next_enhanced is None:

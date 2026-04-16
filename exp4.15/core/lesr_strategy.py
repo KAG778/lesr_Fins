@@ -1,8 +1,11 @@
 """
-LESR Strategy Module for Exp4.7 Financial Trading Experiment
+LESR Strategy Module for Exp4.15 Financial Trading Experiment
 
 This module implements the LESR strategy that integrates with FINSABER framework
 for backtesting. It uses a trained DQN model with LLM-generated features.
+
+Key design: on_data() builds full enhanced_state = [raw(120) + regime(3) + features(N)]
+matching the _build_enhanced_state pattern from dqn_trainer.py.
 """
 
 import sys
@@ -10,8 +13,12 @@ from pathlib import Path
 import numpy as np
 import logging
 
-# Add parent directory to path for imports
+# Add core/ directory to path for sibling imports (regime_detector)
+sys.path.insert(0, str(Path(__file__).parent))
+# Add parent directory to path for FINSABER imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from regime_detector import detect_regime
 
 from backtest.strategy.timing_llm.base_strategy_iso import BaseStrategyIso
 
@@ -51,6 +58,9 @@ class LESRStrategy(BaseStrategyIso):
         """
         Called for each trading day with new data.
 
+        Builds full enhanced_state = [raw(120) + regime(3) + features(N)]
+        matching the _build_enhanced_state pattern from dqn_trainer.py.
+
         Args:
             date: Current date
             data_loader: Data loader instance
@@ -61,11 +71,17 @@ class LESRStrategy(BaseStrategyIso):
         if raw_state is None:
             return
 
-        # Apply LLM feature enhancement
+        # Build full enhanced state: raw + regime + features
         try:
-            enhanced_state = self.revise_state(raw_state)
+            regime_vector = detect_regime(raw_state)
+            features = self.revise_state(raw_state)
+            if not isinstance(features, np.ndarray):
+                features = np.atleast_1d(np.array(features, dtype=float))
+            if features.ndim != 1:
+                features = features.flatten()
+            enhanced_state = np.concatenate([raw_state, regime_vector, features])
         except Exception as e:
-            self.logger.error(f"Error in revise_state: {e}")
+            self.logger.error(f"Error in state assembly: {e}")
             return
 
         # DQN decision (evaluation mode, no exploration)
