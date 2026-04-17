@@ -13,7 +13,7 @@ from typing import Callable, Dict, Optional
 
 
 # Modules/functions allowed in LLM code
-_ALLOWED_IMPORTS = {'numpy', 'math', 'np'}
+_ALLOWED_IMPORTS = {'numpy', 'math', 'np', 'feature_library'}
 _BLOCKED_BUILTINS = {
     'exec', 'eval', 'compile', 'open', '__import__',
     'globals', 'locals', 'vars', 'dir', 'getattr', 'setattr', 'delattr',
@@ -62,6 +62,11 @@ def _extract_functions(code_str: str) -> Dict[str, Callable]:
     try:
         import math
         namespace['math'] = math
+    except ImportError:
+        pass
+    try:
+        import feature_library
+        namespace['feature_library'] = feature_library
     except ImportError:
         pass
 
