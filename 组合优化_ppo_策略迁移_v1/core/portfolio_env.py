@@ -185,14 +185,19 @@ class PortfolioEnv:
 
         # Revised extras per stock (K * 5)
         if self.revise_state_fn:
-            revised_per_stock = []
+            # First pass: detect extras dimension from any stock that produces extras
             extras_dim = None
             for ticker in TICKERS:
                 full_revised = self.revise_state_fn(raw_states[ticker])
                 if len(full_revised) > 120:
+                    extras_dim = len(full_revised) - 120
+                    break
+            # Second pass: build extras with consistent dimension
+            revised_per_stock = []
+            for ticker in TICKERS:
+                full_revised = self.revise_state_fn(raw_states[ticker])
+                if len(full_revised) > 120:
                     extras = full_revised[120:]
-                    if extras_dim is None:
-                        extras_dim = len(extras)
                 else:
                     extras = np.zeros(extras_dim) if extras_dim is not None else np.array([])
                 if np.any(np.isnan(extras)) or np.any(np.isinf(extras)):
