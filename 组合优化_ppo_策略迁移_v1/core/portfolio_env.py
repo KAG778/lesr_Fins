@@ -186,13 +186,22 @@ class PortfolioEnv:
         # Revised extras per stock (K * 5)
         if self.revise_state_fn:
             revised_per_stock = []
+            extras_dim = None
             for ticker in TICKERS:
                 full_revised = self.revise_state_fn(raw_states[ticker])
-                extras = full_revised[120:] if len(full_revised) > 120 else np.array([0.0])
+                if len(full_revised) > 120:
+                    extras = full_revised[120:]
+                    if extras_dim is None:
+                        extras_dim = len(extras)
+                else:
+                    extras = np.zeros(extras_dim) if extras_dim is not None else np.array([])
                 if np.any(np.isnan(extras)) or np.any(np.isinf(extras)):
-                    extras = np.zeros_like(extras)
+                    extras = np.zeros_like(extras) if len(extras) > 0 else extras
                 revised_per_stock.append(extras)
-            parts.append(np.concatenate(revised_per_stock))
+            if extras_dim is not None:
+                parts.append(np.concatenate(revised_per_stock))
+            else:
+                parts.append(np.zeros(5))
         else:
             parts.append(np.zeros(5))
 
