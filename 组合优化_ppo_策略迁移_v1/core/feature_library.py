@@ -215,7 +215,7 @@ def compute_bollinger(s: np.ndarray, window: int = 20, num_std: float = 2.0) -> 
         return np.zeros(3)
     recent = closes[-window:]
     sma = np.mean(recent)
-    std = np.std(recent) + 1e-10
+    std = np.std(recent, ddof=1) + 1e-10
     price = closes[-1] if abs(closes[-1]) > 1e-8 else 1.0
     upper = (sma + num_std * std - closes[-1]) / price
     middle = (sma - closes[-1]) / price
@@ -610,7 +610,7 @@ def compute_realized_volatility(returns: np.ndarray, window: int = 20) -> float:
         window = len(returns)
     if window < 2:
         return 0.0
-    return float(np.std(returns[-window:]))
+    return float(np.std(returns[-window:], ddof=1))
 
 
 def compute_downside_risk(returns: np.ndarray, window: int = 20) -> float:
