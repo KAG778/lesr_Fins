@@ -389,7 +389,11 @@ class LESRController:
                 n_env_samples = min(100, len(env.dates) - 22)
                 env_state_indices = np.linspace(20, len(env.dates) - 2,
                                                 n_env_samples, dtype=int)
+                # Use equal weights for SHAP to avoid stale final-episode weights
+                saved_weights = env.weights.copy()
+                env.weights = np.ones(6) / 6
                 env_states = np.array([env._compute_state(idx) for idx in env_state_indices])
+                env.weights = saved_weights
                 # Extra dims: only LLM-generated features [50 : 50 + feature_dim * 5]
                 feature_dim = code_sample.get('feature_dim', 0)
                 extra_end = 50 + feature_dim * 5
@@ -403,18 +407,25 @@ class LESRController:
                     # Average intrinsic reward stats across tickers
                     first_ticker_states = next(iter(revised_per_ticker.values()))
                     if len(first_ticker_states) > 10:
+                        # Compute per-ticker intrinsic reward vs forward returns correlation
+                        per_ticker_corrs = []
+                        n_ir_samples = min(50, len(forward_returns))
+                        for ticker, states in revised_per_ticker.items():
+                            ir_vals = [float(code_sample['intrinsic_reward_fn'](s))
+                                       for s in states[:n_ir_samples]]
+                            if len(ir_vals) > 5:
+                                c = float(np.corrcoef(ir_vals, forward_returns[:n_ir_samples])[0, 1])
+                                if not np.isnan(c):
+                                    per_ticker_corrs.append(c)
                         all_ir_values = []
                         for ticker, states in revised_per_ticker.items():
                             all_ir_values.extend(
-                                [code_sample['intrinsic_reward_fn'](s) for s in states[:50]])
+                                [float(code_sample['intrinsic_reward_fn'](s)) for s in states[:n_ir_samples]])
                         ir_mean = float(np.mean(all_ir_values))
-                        ir_corr = float(np.corrcoef(
-                            all_ir_values[:len(forward_returns)],
-                            np.tile(forward_returns[:50], len(TICKERS))[:len(all_ir_values)]
-                        )[0, 1]) if len(all_ir_values) > 5 else 0.0
+                        ir_corr = float(np.mean(per_ticker_corrs)) if per_ticker_corrs else 0.0
                         ir_stats = {
                             'mean': ir_mean,
-                            'correlation_with_performance': ir_corr if not np.isnan(ir_corr) else 0.0,
+                            'correlation_with_performance': ir_corr,
                         }
         except Exception as e:
             print(f"  IC/SHAP computation skipped: {e}")
@@ -990,7 +1001,8 @@ def intrinsic_reward(updated_s):
             lesr_str = fmt % lesr_val if not np.isnan(lesr_val) else 'N/A'
             base1_str = fmt % base1_val if not np.isnan(base1_val) else 'N/A'
             base2_str = fmt % base2_val if not np.isnan(base2_val) else 'N/A'
-            best = max(lesr_val, base1_val, base2_val) if not any(np.isnan(v) for v in [lesr_val, base1_val, base2_val]) else float('nan')
+            higher_is_better = (suffix != 'max_drawdown')
+            best = max(lesr_val, base1_val, base2_val) if higher_is_better else min(lesr_val, base1_val, base2_val) if not any(np.isnan(v) for v in [lesr_val, base1_val, base2_val]) else float('nan')
             m1 = " *" if not np.isnan(lesr_val) and lesr_val == best else ""
             m2 = " *" if not np.isnan(base1_val) and base1_val == best else ""
             m3 = " *" if not np.isnan(base2_val) and base2_val == best else ""
