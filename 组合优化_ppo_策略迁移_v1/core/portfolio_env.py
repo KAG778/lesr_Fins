@@ -374,28 +374,40 @@ class PortfolioEnv:
 
         return next_state, reward, done, info
 
-    def get_revised_states(self, n_samples: int = 200) -> tuple:
-        """Get revised states and forward returns for IC computation.
+    def get_revised_states(self, n_samples: int = 200) -> dict:
+        """Get revised states per ticker and forward returns for IC computation.
 
-        获取修订后的状态和远期收益，用于 IC 计算。
-        返回：(revised_states, forward_returns, regime_labels)
+        获取每只股票的修订状态和远期收益，用于 IC 计算。
+        返回 dict:
+          - 'revised_states_per_ticker': {ticker: (N, state_dim)}
+          - 'forward_returns': (N,)
+          - 'regime_labels': (N,)
         """
         if self.revise_state_fn is None:
-            return np.array([]), np.array([]), np.array([])
+            return {
+                'revised_states_per_ticker': {},
+                'forward_returns': np.array([]),
+                'regime_labels': np.array([]),
+            }
 
         n = min(n_samples, len(self.dates) - WINDOW - 1)
         if n < 10:
-            return np.array([]), np.array([]), np.array([])
+            return {
+                'revised_states_per_ticker': {},
+                'forward_returns': np.array([]),
+                'regime_labels': np.array([]),
+            }
         indices = np.linspace(WINDOW, len(self.dates) - 2, n, dtype=int)
 
-        revised_list = []
+        revised_per_ticker = {t: [] for t in TICKERS}
         forward_list = []
         regime_labels = []
 
         for idx in indices:
             raw_states = self._get_raw_states_dict(idx)
-            revised = self.revise_state_fn(raw_states[TICKERS[0]])
-            revised_list.append(revised)
+            for ticker in TICKERS:
+                revised = self.revise_state_fn(raw_states[ticker])
+                revised_per_ticker[ticker].append(revised)
 
             date = self.dates[idx]
             next_date = self.dates[idx + 1]
@@ -414,7 +426,14 @@ class PortfolioEnv:
             else:
                 regime_labels.append('neutral')
 
-        return np.array(revised_list), np.array(forward_list), np.array(regime_labels)
+        revised_states_per_ticker = {
+            t: np.array(revised_per_ticker[t]) for t in TICKERS
+        }
+        return {
+            'revised_states_per_ticker': revised_states_per_ticker,
+            'forward_returns': np.array(forward_list),
+            'regime_labels': np.array(regime_labels),
+        }
 
     def get_training_states(self, n_samples: int = 200) -> tuple:
         """Get sample states and forward returns for feature screening.
