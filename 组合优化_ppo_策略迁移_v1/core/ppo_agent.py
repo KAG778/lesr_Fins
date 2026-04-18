@@ -182,7 +182,6 @@ class PPOAgent:
         """选择动作：采样 Dirichlet 分布得到权重。deterministic=True 时取均值。"""
         state_t = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
-            self.critic.eval()
             if deterministic:
                 weights = self.actor.sample_weights(state_t, deterministic=True)
                 return weights.cpu().numpy().flatten(), 0.0
