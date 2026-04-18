@@ -397,11 +397,23 @@ class LESRController:
                 # Extra dims: only LLM-generated features [50 : 50 + feature_dim * 5]
                 feature_dim = code_sample.get('feature_dim', 0)
                 extra_end = 50 + feature_dim * 5
-                shap_profile = compute_critic_shap(
+                raw_shap_profile = compute_critic_shap(
                     agent.critic, env_states, extra_start=50, extra_end=extra_end,
                     device=device)
+                # Map SHAP dims (env-state: 50+s*feature_dim+j) to IC dims (revised-state: 120+j)
+                # Average SHAP across 5 stocks for each feature j
+                shap_profile = {}
+                if raw_shap_profile and feature_dim > 0:
+                    for j in range(feature_dim):
+                        shap_vals = []
+                        for s in range(len(TICKERS)):
+                            env_dim = 50 + s * feature_dim + j
+                            if env_dim in raw_shap_profile:
+                                shap_vals.append(raw_shap_profile[env_dim])
+                        if shap_vals:
+                            shap_profile[120 + j] = float(np.mean(shap_vals))
                 if shap_profile:
-                    print(f"  SHAP computed for {len(shap_profile)} extra dims")
+                    print(f"  SHAP computed for {len(shap_profile)} extra dims (mapped to IC coords)")
 
                 if code_sample.get('intrinsic_reward_fn'):
                     # Average intrinsic reward stats across tickers
