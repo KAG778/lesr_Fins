@@ -85,6 +85,55 @@ def compute_regime_specific_ic(revised_states: np.ndarray,
     return result
 
 
+def compute_ic_profile_ensemble(revised_states_per_ticker: Dict[str, np.ndarray],
+                                forward_returns: np.ndarray) -> Dict[int, float]:
+    """Compute IC averaged across all tickers."""
+    all_ics = []
+    for ticker, states in revised_states_per_ticker.items():
+        ic = compute_ic_profile(states, forward_returns)
+        if ic:
+            all_ics.append(ic)
+
+    if not all_ics:
+        return {}
+
+    all_dims = set()
+    for ic in all_ics:
+        all_dims.update(ic.keys())
+
+    return {dim: float(np.mean([ic.get(dim, 0.0) for ic in all_ics]))
+            for dim in sorted(all_dims)}
+
+
+def compute_regime_specific_ic_ensemble(revised_states_per_ticker: Dict[str, np.ndarray],
+                                        forward_returns: np.ndarray,
+                                        regime_labels: np.ndarray) -> Dict[str, Dict[int, float]]:
+    """Compute regime-specific IC averaged across all tickers."""
+    per_ticker_regime_ics = []
+    for ticker, states in revised_states_per_ticker.items():
+        ric = compute_regime_specific_ic(states, forward_returns, regime_labels)
+        if ric:
+            per_ticker_regime_ics.append(ric)
+
+    if not per_ticker_regime_ics:
+        return {}
+
+    all_regimes = set()
+    for ric in per_ticker_regime_ics:
+        all_regimes.update(ric.keys())
+
+    result = {}
+    for regime in all_regimes:
+        regime_ics = [ric.get(regime, {}) for ric in per_ticker_regime_ics]
+        all_dims = set()
+        for ic in regime_ics:
+            all_dims.update(ic.keys())
+        result[regime] = {dim: float(np.mean([ic.get(dim, 0.0) for ic in regime_ics]))
+                          for dim in sorted(all_dims)}
+
+    return result
+
+
 def compute_critic_shap(critic, env_states: np.ndarray,
                         extra_start: int = 50,
                         extra_end: int = None,
