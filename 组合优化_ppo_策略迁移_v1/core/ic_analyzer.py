@@ -326,7 +326,7 @@ def build_ic_cot_prompt(
                 elif abs_ic < weak_threshold:
                     tag = "Weak"
                 if ic_val < -0.03:
-                    tag = "Negative"
+                    tag = (tag + " Negative").strip() if tag else "Negative"
                 lines.append(f"    s[{dim}]: IC={ic_val:+.4f} SHAP={shap_val:.6f} {tag}")
         else:
             lines.append("  [IC Analysis]")
@@ -334,11 +334,13 @@ def build_ic_cot_prompt(
                 abs_ic = abs(ic_val)
                 tag = ""
                 if abs_ic > strong_threshold:
-                    tag = "<- Strong"
+                    tag = "Strong"
                 elif abs_ic < weak_threshold:
-                    tag = "<- Weak"
+                    tag = "Weak"
                 if ic_val < -0.03:
-                    tag = "<- Negative"
+                    tag = (tag + " Negative").strip() if tag else "Negative"
+                if tag:
+                    tag = "<- " + tag
                 lines.append(f"    s[{dim}]: IC = {ic_val:+.4f} {tag}")
 
         if regime_ic:
@@ -431,10 +433,12 @@ def build_ic_cot_prompt(
             lines.append(f"  (d) Negative IC features: {dim_str}. These may be harmful. "
                          "Consider removing or inverting the signal.")
 
-        has_volatility = any('volatil' in str(v) for v in best_ic.values())
-        if not has_volatility and best_regime_ic.get('volatile'):
-            lines.append("  (e) No volatility features detected for volatile regime. "
-                         "Consider adding realized_volatility or downside_risk.")
+        if best_regime_ic.get('volatile'):
+            volatile_ic = best_regime_ic['volatile']
+            n_effective_vol = sum(1 for v in volatile_ic.values() if abs(v) > 0.03)
+            if n_effective_vol == 0:
+                lines.append("  (e) No features show meaningful IC in volatile regime. "
+                             "Consider adding realized_volatility or downside_risk.")
 
     # --- Risk Feature Gap Analysis (Layer 3: COT feedback) ---
     if best_regime_ic:
