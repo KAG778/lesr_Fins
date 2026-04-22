@@ -61,19 +61,29 @@ def run_lesr_optimization(config, data_loader, openai_key):
     """运行LESR优化"""
     from lesr_controller import LESRController
 
+    # Resolve absolute data pickle path for worker processes
+    import os
+    data_pkl = os.path.abspath(config['data']['pickle_file'])
+    if not os.path.exists(data_pkl):
+        # Try relative to script location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(script_dir)
+        data_pkl = os.path.join(parent_dir, config['data']['pickle_file'])
+
     lesl_config = {
         'tickers': config['experiment']['tickers'],
         'train_period': config['experiment']['train_period'],
         'val_period': config['experiment']['val_period'],
         'test_period': config['experiment']['test_period'],
         'data_loader': data_loader,
-        'sample_count': config['experiment'].get('sample_count', 6),
-        'max_iterations': config['experiment'].get('max_iterations', 3),
+        'data_pkl_path': data_pkl,
+        'n_candidates': config['experiment'].get('sample_count', 3),
+        'max_iterations': config['experiment'].get('max_iterations', 5),
         'openai_key': openai_key,
         'model': config['llm'].get('model', 'gpt-4o-mini'),
         'temperature': config['llm'].get('temperature', 0.7),
         'base_url': config['llm'].get('base_url'),
-        'output_dir': config['output'].get('output_dir', 'exp4.7/results')
+        'output_dir': config['output'].get('output_dir', 'results')
     }
 
     logger.info("开始LESR优化...")
@@ -85,12 +95,26 @@ def run_lesr_optimization(config, data_loader, openai_key):
 
 def main():
     """主函数"""
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default=None, help='Config YAML path')
+    args = parser.parse_args()
+
+    # Ensure working directory is exp4.15/
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.path.dirname(script_dir)
+    os.chdir(project_dir)
+    sys.path.insert(0, os.path.join(project_dir, 'core'))
+
     logger.info("=" * 60)
-    logger.info("Exp4.7: 金融交易LESR优化实验")
+    logger.info("Exp4.15: JSON-Mode LESR Optimization")
     logger.info("=" * 60)
 
     # 加载配置
-    config = load_config('config.yaml')
+    cfg_path = args.config or os.path.join(project_dir, 'config.yaml')
+    if not os.path.isabs(cfg_path):
+        cfg_path = os.path.join(project_dir, cfg_path)
+    config = load_config(cfg_path)
 
     # 设置API密钥
     openai_key = setup_environment(config)

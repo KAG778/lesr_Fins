@@ -1,0 +1,385 @@
+
+We trained DQN policies using 6 different intrinsic reward functions.
+
+Training Results:
+========== Code Candidate -- 1 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    s = enhanced_state
+    
+    # Extract relevant features
+    position = s[150]  # Current position (1.0 = holding, 0.0 = not holding)
+    volatility_5d = s[135]  # 5-day historical volatility
+    volatility_20d = s[136]  # 20-day historical volatility
+    trend_r2 = s[145]  # Trend strength (R² of regression)
+    bb_pos = s[149]  # Bollinger Band position [0,1]
+    
+    # Calculate relative volatility thresholds
+    high_vol_threshold = 2 * volatility_20d  # High volatility condition
+    low_vol_threshold = 0.5 * volatility_20d  # Low volatility condition
+
+    # Initialize reward
+    reward = 0
+
+    if position == 0:  # Not holding stock (BUY opportunity)
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong trend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.3:  # Slightly weaker conditions
+            reward += 30  # Mild buy signal
+        elif volatility_5d > high_vol_threshold:  # High volatility, be cautious
+            reward -= 20  # Negative reward for buy in high volatility
+        else:
+            reward -= 5  # Neutral case, slight penalty for indecision
+
+    elif position == 1:  # Holding stock (SELL opportunity)
+        if trend_r2 > 0.8 and bb_pos < 0.8:  # Strong trend but not overbought
+            reward += 20  # Encourage holding
+        elif bb_pos > 0.8:  # Overbought condition
+            reward -= 30  # Strong signal to consider selling
+        elif trend_r2 < 0.5:  # Weak trend, consider selling
+            reward -= 40  # Strong signal to sell
+        elif volatility_5d > high_vol_threshold:  # Caution in high volatility
+            reward -= 20  # Penalize holding in high volatility
+        else:
+            reward += 10  # Neutral holding position
+
+    # Normalize the reward to the range of [-100, 100]
+    reward = np.clip(reward, -100, 100)
+
+    return reward
+Performance Metrics:
+  Sharpe Ratio: 0.172
+  Max Drawdown: 37.36%
+  Total Return: 15.77%
+  Number of Trades: 88
+
+New Feature Importance (Top 5 of 30):
+  feature_17 (s[137]): importance=0.068, corr=0.025
+  feature_2 (s[122]): importance=0.060, corr=0.043
+  feature_22 (s[142]): importance=0.060, corr=0.019
+  feature_23 (s[143]): importance=0.059, corr=0.043
+  feature_4 (s[124]): importance=0.055, corr=0.036
+
+========== Code Candidate -- 2 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    s = enhanced_state
+    
+    # Extract relevant features
+    position = s[150]  # Current position: 1.0 = holding, 0.0 = not holding
+    volatility_5d = s[135]  # 5-day historical volatility
+    volatility_20d = s[136]  # 20-day historical volatility
+    trend_r2 = s[145]  # Trend strength (R² of regression)
+    bb_pos = s[149]  # Bollinger Band position [0,1]
+    
+    # Relative thresholds based on volatility
+    avg_volatility = (volatility_5d + volatility_20d) / 2
+    high_volatility_threshold = 2 * avg_volatility  # High volatility condition
+    low_volatility_threshold = 0.5 * avg_volatility  # Low volatility condition
+    
+    # Initialize reward
+    reward = 0
+    
+    if position == 0:  # Not holding stock (Buy logic)
+        # Look for strong buy signals
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong uptrend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.3:  # Decent trend and oversold
+            reward += 30  # Moderate buy signal
+        elif volatility_5d > high_volatility_threshold:  # High volatility
+            reward -= 20  # Caution, avoid buying
+        else:
+            reward -= 5  # Neutral case for indecision
+
+    elif position == 1:  # Holding stock (Sell logic)
+        # Look for strong sell signals
+        if trend_r2 < 0.5 or bb_pos > 0.8:  # Weak trend or overbought
+            reward -= 50  # Strong sell signal
+        elif trend_r2 > 0.8:  # Strong trend
+            reward += 20  # Reward for holding
+        elif bb_pos > 0.5 and trend_r2 < 0.7:  # Moderate trend but nearing overbought
+            reward += 10  # Consider taking profit
+        elif volatility_5d > high_volatility_threshold:  # High volatility
+            reward -= 15  # Caution when holding in high volatility
+        else:
+            reward += 5  # Mild reward for holding in stable trend
+
+    # Normalize the reward to the range [-100, 100]
+    reward = np.clip(reward, -100, 100)
+
+    return reward
+Performance Metrics:
+  Sharpe Ratio: 0.640
+  Max Drawdown: 35.87%
+  Total Return: 27.74%
+  Number of Trades: 82
+
+New Feature Importance (Top 5 of 30):
+  feature_29 (s[149]): importance=0.115, corr=0.091
+  feature_28 (s[148]): importance=0.102, corr=0.060
+  feature_17 (s[137]): importance=0.086, corr=0.016
+  feature_20 (s[140]): importance=0.084, corr=0.063
+  feature_11 (s[131]): importance=0.083, corr=0.037
+
+========== Code Candidate -- 3 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    s = enhanced_state
+    
+    # Extract features
+    position = s[150]  # Current position: 1.0 = holding, 0.0 = not holding
+    volatility_5d = s[135]  # 5-day historical volatility
+    volatility_20d = s[136]  # 20-day historical volatility
+    trend_r2 = s[145]  # Trend strength (R² of regression)
+    bb_pos = s[149]  # Bollinger Band position [0,1]
+    
+    # Calculate average volatility for thresholds
+    avg_volatility = (volatility_5d + volatility_20d) / 2
+    high_volatility_threshold = 2 * avg_volatility  # Extreme market condition
+    low_volatility_threshold = 0.5 * avg_volatility  # Safe entry condition
+
+    # Initialize reward
+    reward = 0.0
+
+    # Reward logic based on position and market conditions
+    if position == 0:  # Not holding
+        # Check for buy conditions
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong uptrend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.3:  # Good trend but not oversold
+            reward += 30  # Good buy conditions
+        elif trend_r2 < 0.5 and volatility_5d > high_volatility_threshold:  # Weak trend and high volatility
+            reward -= 20  # Negative reward, be cautious about buying
+        elif volatility_5d < low_volatility_threshold:  # Low volatility
+            reward += 20  # Safe to enter a position
+        else:
+            reward -= 5  # Slight penalty for indecision
+
+    elif position == 1:  # Holding
+        # Check for hold or sell conditions
+        if trend_r2 > 0.8:  # Strong trend
+            reward += 20  # Reward for holding
+        elif bb_pos > 0.8:  # Overbought condition
+            reward -= 30  # Consider selling
+        elif trend_r2 < 0.5:  # Weak trend
+            reward -= 40  # Strong signal to sell
+        elif volatility_5d > high_volatility_threshold:  # High volatility
+            reward -= 20  # Be cautious, consider selling
+        else:
+            reward += 5  # Mild reward for holding in stable conditions
+
+    # Normalize reward to the range of [-100, 100]
+    reward = np.clip(reward, -100, 100)
+
+    return reward
+Performance Metrics:
+  Sharpe Ratio: 0.771
+  Max Drawdown: 38.56%
+  Total Return: 52.59%
+  Number of Trades: 38
+
+New Feature Importance (Top 5 of 30):
+  feature_23 (s[143]): importance=0.105, corr=0.095
+  feature_29 (s[149]): importance=0.104, corr=0.061
+  feature_17 (s[137]): importance=0.090, corr=0.029
+  feature_25 (s[145]): importance=0.080, corr=0.077
+  feature_27 (s[147]): importance=0.065, corr=0.048
+
+========== Code Candidate -- 4 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    # Extract relevant features from the enhanced state
+    position = enhanced_state[150]  # Current position (1 = holding, 0 = not holding)
+    volatility_5d = enhanced_state[135]  # 5-day historical volatility
+    volatility_20d = enhanced_state[136]  # 20-day historical volatility
+    trend_r2 = enhanced_state[145]  # Trend strength (R² of regression)
+    bb_pos = enhanced_state[149]  # Bollinger Band position [0, 1]
+    
+    # Calculate relative thresholds based on volatility
+    high_volatility_threshold = 2 * volatility_20d  # High volatility condition
+    low_volatility_threshold = 0.5 * volatility_20d  # Low volatility condition
+
+    # Initialize reward
+    reward = 0.0
+
+    if position == 0:  # Not holding stock (BUY opportunities)
+        # Look for strong buy conditions
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong trend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.3:  # Good trend and slightly oversold
+            reward += 30  # Moderate buy opportunity
+        elif volatility_5d > high_volatility_threshold:  # High volatility caution
+            reward -= 20  # Penalize for buying in high volatility
+        else:
+            reward -= 5  # Neutral case, discourage random buys
+
+    elif position == 1:  # Holding stock (HOLD or SELL opportunities)
+        # Look for hold or sell signals
+        if trend_r2 > 0.8:  # Strong trend, encourage holding
+            reward += 20  # Reward for holding
+        elif bb_pos > 0.8:  # Overbought condition, consider selling
+            reward -= 30  # Penalize for not selling
+        elif trend_r2 < 0.5:  # Weak trend, consider selling
+            reward -= 20  # Encourage selling in weak trends
+        elif volatility_5d > high_volatility_threshold:  # High volatility caution
+            reward -= 10  # Caution when holding in high volatility
+        else:
+            reward += 5  # Small reward for maintaining position in stable conditions
+
+    # Normalize reward to be within [-100, 100]
+    return np.clip(reward, -100, 100)
+Performance Metrics:
+  Sharpe Ratio: 0.402
+  Max Drawdown: 33.44%
+  Total Return: 32.45%
+  Number of Trades: 62
+
+New Feature Importance (Top 5 of 30):
+  feature_20 (s[140]): importance=0.084, corr=0.115
+  feature_23 (s[143]): importance=0.047, corr=0.060
+  feature_25 (s[145]): importance=0.045, corr=0.054
+  feature_27 (s[147]): importance=0.044, corr=0.046
+  feature_22 (s[142]): importance=0.040, corr=0.046
+
+========== Code Candidate -- 5 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    s = enhanced_state
+    position = s[150]  # Current position: 1.0 = holding, 0.0 = not holding
+    
+    # Extract relevant features
+    volatility_5d = s[135]  # 5-day historical volatility
+    volatility_20d = s[136]  # 20-day historical volatility
+    trend_r2 = s[145]  # Trend strength (R² of regression)
+    bb_pos = s[149]  # Bollinger Band position [0,1]
+    
+    # Calculate average volatility for thresholds
+    avg_volatility = (volatility_5d + volatility_20d) / 2
+    high_volatility_threshold = 2 * avg_volatility  # Extreme market condition
+    low_volatility_threshold = 0.5 * avg_volatility  # Low volatility condition
+
+    # Initialize reward
+    reward = 0.0
+
+    if position == 0:  # Not holding stock
+        # Look for BUY signals
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong trend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.3:  # Good trend and near oversold
+            reward += 30  # Moderate buy signal
+        elif volatility_5d > high_volatility_threshold:  # Caution in high volatility
+            reward -= 20  # Penalize entering positions under high volatility
+        else:
+            reward -= 5  # Neutral case (slight penalty for indecision)
+
+    else:  # Holding stock
+        # Look for HOLD or SELL signals
+        if trend_r2 > 0.8:  # Very strong trend
+            reward += 20  # Reward for holding
+        elif bb_pos > 0.8:  # Overbought conditions
+            reward -= 30  # Strong sell signal
+        elif trend_r2 < 0.5 or bb_pos > 0.7:  # Weak trend or high bb position
+            reward -= 40  # Strongly consider selling
+        elif volatility_5d > high_volatility_threshold:  # Caution when holding in high volatility
+            reward -= 10  # Penalize holding in high volatility
+        else:
+            reward += 5  # Neutral reward for holding in stable conditions
+
+    # Ensure that the reward is within the specified range
+    reward = np.clip(reward, -100, 100)
+
+    return reward
+Performance Metrics:
+  Sharpe Ratio: 0.639
+  Max Drawdown: 37.98%
+  Total Return: 37.88%
+  Number of Trades: 102
+
+New Feature Importance (Top 5 of 30):
+  feature_17 (s[137]): importance=0.171, corr=0.136
+  feature_1 (s[121]): importance=0.089, corr=0.120
+  feature_4 (s[124]): importance=0.088, corr=0.123
+  feature_2 (s[122]): importance=0.083, corr=0.122
+  feature_29 (s[149]): importance=0.075, corr=0.091
+
+========== Code Candidate -- 6 ==========
+import numpy as np
+
+def intrinsic_reward(enhanced_state):
+    s = enhanced_state
+    
+    position = s[150]  # Position: 1.0 = holding, 0.0 = not holding
+    volatility_5d = s[135]  # 5-day historical volatility
+    volatility_20d = s[136]  # 20-day historical volatility
+    trend_r2 = s[145]  # Trend strength (R² of regression)
+    bb_pos = s[149]  # Bollinger Band position [0,1]
+    
+    # Calculate relative thresholds based on volatility
+    avg_volatility = (volatility_5d + volatility_20d) / 2
+    high_volatility_threshold = 2 * avg_volatility
+    low_volatility_threshold = 0.5 * avg_volatility
+
+    # Initialize reward
+    reward = 0
+
+    if position == 0:  # Not holding stock (BUY conditions)
+        if trend_r2 > 0.8 and bb_pos < 0.2:  # Strong uptrend and oversold
+            reward += 50  # Strong buy signal
+        elif trend_r2 > 0.6 and bb_pos < 0.4:  # Good trend, slightly oversold
+            reward += 30  # Moderate buy signal
+        elif volatility_5d > high_volatility_threshold:  # High volatility
+            reward -= 20  # Caution, consider waiting
+        else:
+            reward -= 5  # Small penalty for indecision
+
+    elif position == 1:  # Holding stock (SELL or HOLD conditions)
+        if trend_r2 > 0.8:  # Strong trend
+            reward += 20  # Reward for holding in a strong trend
+        elif bb_pos > 0.8:  # Overbought condition
+            reward -= 30  # Consider selling
+        elif trend_r2 < 0.5:  # Weak trend
+            reward -= 20  # Consider selling
+        elif volatility_5d > high_volatility_threshold:  # Extreme volatility
+            reward -= 10  # Caution, consider selling
+        else:
+            reward += 5  # Mild reward for stable holding conditions
+
+    # Normalize reward to be within [-100, 100]
+    reward = np.clip(reward, -100, 100)
+
+    return reward
+Performance Metrics:
+  Sharpe Ratio: 0.675
+  Max Drawdown: 19.88%
+  Total Return: 28.88%
+  Number of Trades: 94
+
+New Feature Importance (Top 5 of 30):
+  feature_14 (s[134]): importance=0.079, corr=0.108
+  feature_27 (s[147]): importance=0.079, corr=0.111
+  feature_22 (s[142]): importance=0.077, corr=0.111
+  feature_15 (s[135]): importance=0.075, corr=0.105
+  feature_25 (s[145]): importance=0.066, corr=0.096
+
+
+
+Please analyze the results and provide improvement suggestions:
+
+Analysis Points:
+(a) Which reward functions work best? What patterns do they share?
+(b) What are common problems of low-performance reward functions?
+(c) How should the reward function use position flag (s[150]) to differentiate buy/sell?
+(d) Are there too many or too few trades? How to adjust the reward to control frequency?
+
+Key reminders:
+- The reward function receives a 151-dim state (120 OHLCV + 30 pre-computed features + 1 position flag)
+- Use relative thresholds based on volatility features (s[135:137])
+- Use regime features (s[144:149]) to adapt to market conditions
+- The position flag s[150] tells whether currently holding (1.0) or not (0.0)
+
+Goal: Improve Sharpe ratio while keeping max drawdown under 30%.

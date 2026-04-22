@@ -19,6 +19,9 @@ Replaces (DELETED):
 
 import re
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import numpy as np
 from typing import List, Dict, Optional
 
@@ -59,6 +62,34 @@ INITIAL_PROMPT_TEMPLATE = """You are a financial quantitative analysis expert se
 - Volume_Ratio(window: 5-30) - Volume Ratio, default 20
 - ADX(window: 5-30) - Average Directional Index, default 14
 
+## CRITICAL: Valid Indicator Names (USE ONLY THESE)
+
+### TREND (9 indicators)
+RSI, MACD, EMA_Cross, Momentum, ROC, SMA_Cross, DEMA, Williams_Alligator, TSF
+
+### VOLATILITY (5 indicators)
+Bollinger, ATR, Volatility, Skewness, Kurtosis
+
+### MEAN REVERSION (3 indicators)
+Stochastic, Williams_R, CCI
+
+### VOLUME (3 indicators)
+OBV, Volume_Ratio, ADX
+
+### CRITICAL: ONLY USE THESE 20 EXACT NAMES
+RSI, MACD, EMA_Cross, Momentum, ROC, SMA_Cross, DEMA, Williams_Alligator, TSF,
+Bollinger, ATR, Volatility, Skewness, Kurtosis,
+Stochastic, Williams_R, CCI,
+OBV, Volume_Ratio, ADX
+
+STRICT RULES (MUST FOLLOW):
+- ONLY use the 20 indicator names listed above - NO OTHER NAMES
+- DO NOT create custom indicator names like "Price_Channels", "MA", "VWAP", "Average True Range", "Fibonacci_Retracement", "Relative_Volume", "HMA", "Custom Composite", "Rate of Change"
+- If you need Moving Average, use "EMA_Cross" or "SMA_Cross", NOT "MA" or "EMA" or "SMA" alone
+- If you need Rate of Change, use "ROC", NOT "Rate of Change" (exact name is ROC)
+- If you need Williams %R, use "Williams_R", NOT "Williams %R" (exact name is Williams_R)
+- Any invalid indicator name will cause immediate rejection
+
 ## Market Context
 {market_stats}
 
@@ -79,6 +110,7 @@ INITIAL_PROMPT_TEMPLATE = """You are a financial quantitative analysis expert se
 - Diversify across themes (don't pick all from one theme)
 - Each indicator must have an economic rationale
 - Parameters should be adapted to market context above
+- **CRITICAL: Use ONLY the 20 exact indicator names listed above - NO variations, NO custom names**
 - Output ONLY the JSON block, no additional text
 """
 
@@ -199,11 +231,32 @@ def get_iteration_prompt(last_selection: Dict, cot_feedback: str,
 {best_json}
 ```
 
-## Available Indicators (abbreviated)
-Trend: RSI(w), MACD(f,s,sig), EMA_Cross(f,s), Momentum(w), ROC(w), SMA_Cross(f,s), DEMA(w), Williams_Alligator(), TSF(w)
-Volatility: Bollinger(w,std), ATR(w), Volatility(w), Skewness(w), Kurtosis(w)
-Mean Reversion: Stochastic(w), Williams_R(w), CCI(w)
-Volume: OBV(), Volume_Ratio(w), ADX(w)
+## Available Indicators (USE ONLY THESE EXACT NAMES)
+
+### TREND (9 indicators)
+RSI, MACD, EMA_Cross, Momentum, ROC, SMA_Cross, DEMA, Williams_Alligator, TSF
+
+### VOLATILITY (5 indicators)
+Bollinger, ATR, Volatility, Skewness, Kurtosis
+
+### MEAN REVERSION (3 indicators)
+Stochastic, Williams_R, CCI
+
+### VOLUME (3 indicators)
+OBV, Volume_Ratio, ADX
+
+### CRITICAL: ONLY USE THESE 20 EXACT NAMES
+RSI, MACD, EMA_Cross, Momentum, ROC, SMA_Cross, DEMA, Williams_Alligator, TSF,
+Bollinger, ATR, Volatility, Skewness, Kurtosis,
+Stochastic, Williams_R, CCI,
+OBV, Volume_Ratio, ADX
+
+CRITICAL RULES (MUST FOLLOW):
+- ONLY use the 20 exact indicator names listed above - NO abbreviations, NO variations
+- DO NOT create custom indicator names like "Price_Channels", "MA", "VWAP", "Average True Range", "Fibonacci_Retracement", "Relative_Volume", "HMA", "Custom Composite", "Rate of Change"
+- If you need Moving Average, use "EMA_Cross" or "SMA_Cross", NOT "MA" alone
+- Any invalid indicator name will cause immediate rejection
+- Use full parameter names like "window", "fast", "slow", "signal" - NOT "w" or "f,s,sig"
 
 ## Output Format (STRICT JSON)
 ```json
@@ -218,10 +271,13 @@ Volume: OBV(), Volume_Ratio(w), ADX(w)
 - Avoid indicators that were rejected in previous iterations
 - Diversify across themes
 - Parameters within listed ranges
+- **CRITICAL: Use ONLY the 20 exact indicator names listed above - NO variations, NO abbreviations, NO custom names**
 - Output ONLY JSON
 
 """
-    return prompt[:3000]  # Hard cap at ~3000 chars (~2k tokens)
+    # Remove hard cap to ensure indicator list is not truncated
+    # Prompt is already curated to ~2k tokens per D-02
+    return prompt
 
 
 # ===========================================================================
@@ -231,8 +287,11 @@ Volume: OBV(), Volume_Ratio(w), ADX(w)
 def _extract_json(text: str) -> dict:
     """Extract and parse JSON from LLM output text.
 
-    Tries markdown code block extraction first, then falls back to finding
-    first { to last }. Handles trailing commas and type conversion.
+    Tries multiple extraction strategies in order:
+    1. Markdown code block extraction
+    2. Finding first { to last }
+    3. Try to find features as a list
+    4. Handle malformed JSON with trailing commas
 
     Args:
         text: Raw LLM output text.
@@ -246,27 +305,112 @@ def _extract_json(text: str) -> dict:
     if not text or not isinstance(text, str):
         raise ValueError("Empty or non-string input")
 
-    # Try markdown code block extraction first
+    json_str = None
+
+    # Strategy 1: Try markdown code block extraction
     md_pattern = r'```(?:json)?\s*\n?(.*?)\n?\s*```'
     md_match = re.search(md_pattern, text, re.DOTALL)
     json_str = md_match.group(1).strip() if md_match else None
 
+    # Strategy 2: Fall back to finding first { to last }
     if json_str is None:
-        # Fall back to finding first { to last }
         first_brace = text.find('{')
         last_brace = text.rfind('}')
-        if first_brace == -1 or last_brace == -1 or first_brace > last_brace:
-            raise ValueError("No JSON object found in text")
-        json_str = text[first_brace:last_brace + 1]
+        if first_brace != -1 and last_brace != -1 and first_brace < last_brace:
+            json_str = text[first_brace:last_brace + 1]
+
+    # Strategy 3: Try to find a list pattern if no braces found
+    if json_str is None:
+        list_pattern = r'\[.*?\]'
+        list_match = re.search(list_pattern, text, re.DOTALL)
+        if list_match:
+            # Try to parse as list directly
+            try:
+                result = json.loads(list_match.group(0))
+                if isinstance(result, list):
+                    json_str = list_match.group(0)
+            except json.JSONDecodeError:
+                pass
+
+    # If still no JSON found, raise error with debug info
+    if json_str is None:
+        # Log sample of text for debugging
+        sample = text[:200] if len(text) > 200 else text
+        logger.error(f"No JSON pattern found in text. Sample: {sample}...")
+        raise ValueError("No JSON object found in text")
 
     # Clean up trailing commas (JSON5 -> JSON)
     # Remove trailing commas before } or ]
     json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
 
+    # Clean up other common JSON5 patterns
+    # Remove unquoted keys (e.g., {features: ...} -> {"features": ...})
+    json_str = re.sub(r'(\{|\,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_str)
+
     try:
         result = json.loads(json_str)
     except json.JSONDecodeError as e:
+        # Provide more detailed error for debugging
+        sample = json_str[:200] if len(json_str) > 200 else json_str
+        logger.error(f"JSON decode error: {e}. Sample: {sample}...")
         raise ValueError(f"JSON parse error: {e}")
+
+    # Handle case where LLM returns a list instead of dict
+    if isinstance(result, list):
+        # Try to extract features from the list
+        normalized_features = []
+
+        # Flatten nested lists (LLM might return [[{...}, {...}], [{...}, {...}]])
+        def flatten_list(lst):
+            """Recursively flatten nested lists."""
+            flat = []
+            for item in lst:
+                if isinstance(item, list):
+                    flat.extend(flatten_list(item))
+                else:
+                    flat.append(item)
+            return flat
+
+        flattened = flatten_list(result)
+
+        for item in flattened:
+            if not isinstance(item, dict):
+                continue  # Skip non-dict items
+
+            # Try multiple field names for the indicator
+            indicator_name = None
+            for field in ['indicator', 'name', 'feature', 'type']:
+                if field in item:
+                    indicator_name = item.get(field)
+                    break
+
+            if indicator_name:
+                # Normalize the item
+                normalized_item = {'indicator': indicator_name}
+
+                # Copy params if present
+                if 'params' in item:
+                    normalized_item['params'] = item['params']
+                elif 'parameters' in item:
+                    normalized_item['params'] = item['parameters']
+                else:
+                    normalized_item['params'] = {}
+
+                normalized_features.append(normalized_item)
+            else:
+                # If no indicator field found, log and skip
+                logger.debug(f"Skipping item without indicator field: {item}")
+
+        if normalized_features:
+            result = {
+                'features': normalized_features,
+                'rationale': f'Auto-wrapped from list format ({len(normalized_features)} features extracted)'
+            }
+            logger.info(f"LLM returned list instead of dict, auto-wrapped {len(normalized_features)} features")
+        else:
+            # If we couldn't extract any features, provide more helpful error
+            logger.error(f"Failed to extract features from list: {result[:3] if len(result) > 3 else result}...")
+            raise ValueError(f"Expected JSON object (dict), got list without valid feature structure. List items must contain 'indicator', 'name', 'feature', or 'type' field.")
 
     if not isinstance(result, dict):
         raise ValueError(f"Expected JSON object (dict), got {type(result).__name__}")
@@ -294,7 +438,8 @@ def _extract_json(text: str) -> dict:
 
 def get_cot_feedback(selections: List[Dict], scores: List[Dict],
                      screening_reports: List[Dict],
-                     stability_reports: List[Dict]) -> str:
+                     stability_reports: List[Dict],
+                     rejected_selections: Optional[List[Dict]] = None) -> str:
     """Generate structured COT feedback replacing old get_financial_cot_prompt.
 
     Per D-10: Performance (Sharpe/MaxDD/TotalReturn) + per-indicator IC/IR
@@ -306,6 +451,7 @@ def get_cot_feedback(selections: List[Dict], scores: List[Dict],
         scores: List of performance score dicts (sharpe, max_dd, total_return).
         screening_reports: List of screening reports per candidate.
         stability_reports: List of stability reports per candidate.
+        rejected_selections: Optional list of rejected selections with errors.
 
     Returns:
         Structured COT feedback string.
@@ -313,6 +459,23 @@ def get_cot_feedback(selections: List[Dict], scores: List[Dict],
     n = len(selections)
     lines = []
     lines.append(f"Training results for {n} candidate feature selections:\n")
+
+    # Add rejected candidates section (for indicator name errors)
+    if rejected_selections:
+        lines.append("========== REJECTED CANDIDATES ==========")
+        lines.append(f"Note: {len(rejected_selections)} candidates were rejected due to validation errors.\n")
+        for i, r in enumerate(rejected_selections):
+            lines.append(f"Rejected Candidate {i + 1}:")
+            features = r.get('features', [])
+            if features:
+                feature_names = [f.get('indicator', '?') for f in features]
+                lines.append(f"  Attempted indicators: {', '.join(feature_names)}")
+            errors = r.get('errors', [])
+            lines.append(f"  Validation errors:")
+            for err in errors:
+                lines.append(f"    - {err}")
+            lines.append("")
+        lines.append("")
 
     best_idx = 0
     best_sharpe = -float('inf')

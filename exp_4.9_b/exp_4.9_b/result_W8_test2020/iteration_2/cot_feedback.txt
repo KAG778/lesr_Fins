@@ -1,0 +1,762 @@
+
+We trained DQN policies using 5 different state representation and intrinsic reward function combinations.
+
+Training Results:
+========== Code Candidate -- 1 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average."""
+    return np.convolve(prices, np.ones(window) / window, mode='valid')
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average."""
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[0] = prices[0]
+    for i in range(1, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema
+
+def calculate_rsi(prices, window):
+    """Calculate Relative Strength Index."""
+    deltas = np.diff(prices)
+    gain = np.where(deltas > 0, deltas, 0)
+    loss = np.where(deltas < 0, -deltas, 0)
+    
+    avg_gain = np.mean(gain[-window:])
+    avg_loss = np.mean(loss[-window:])
+    
+    rs = avg_gain / avg_loss if avg_loss != 0 else 0
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_atr(highs, lows, closes, window):
+    """Calculate Average True Range."""
+    tr = np.maximum(highs[1:] - lows[1:], np.maximum(np.abs(highs[1:] - closes[:-1]), np.abs(lows[1:] - closes[:-1])))
+    return np.mean(tr[-window:])
+
+def calculate_volatility(returns, window):
+    """Calculate historical volatility."""
+    return np.std(returns[-window:]) * 100 if len(returns) >= window else np.nan
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    opening_prices = s[20:40]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    # Trend Indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    sma_20 = calculate_sma(closing_prices, 20)
+    ema_5 = calculate_ema(closing_prices, 5)
+    ema_10 = calculate_ema(closing_prices, 10)
+
+    # Momentum Indicators
+    rsi_5 = calculate_rsi(closing_prices, 5)
+    rsi_14 = calculate_rsi(closing_prices, 14)
+
+    # Volatility Indicators
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    historical_vol_5 = calculate_volatility(daily_returns, 5)
+    historical_vol_20 = calculate_volatility(daily_returns, 20)
+    atr_14 = calculate_atr(high_prices, low_prices, closing_prices, 14)
+
+    # Volume Indicators
+    obv = np.cumsum(np.where(np.diff(closing_prices) > 0, volumes[1:], -volumes[1:]))
+    volume_avg_5 = np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan
+    volume_avg_20 = np.mean(volumes[-20:]) if len(volumes) >= 20 else np.nan
+    volume_ratio = volumes[-1] / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # Market Regime Features
+    price_position = (closing_prices[-1] - np.min(closing_prices[-20:])) / (np.max(closing_prices[-20:]) - np.min(closing_prices[-20:])) if np.max(closing_prices[-20:]) != np.min(closing_prices[-20:]) else np.nan
+    volatility_ratio = historical_vol_5 / historical_vol_20 if historical_vol_20 > 0 else np.nan
+    trend_strength = np.corrcoef(closing_prices[-20:], range(len(closing_prices[-20:])))[:-1, -1][0] if len(closing_prices) >= 20 else np.nan
+    volume_ratio_regime = volume_avg_5 / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # New features
+    enhanced_s = np.concatenate((
+        s,
+        [
+            sma_5[-1] if len(sma_5) > 0 else 0,
+            sma_10[-1] if len(sma_10) > 0 else 0,
+            sma_20[-1] if len(sma_20) > 0 else 0,
+            ema_5[-1] if len(ema_5) > 0 else 0,
+            ema_10[-1] if len(ema_10) > 0 else 0,
+            rsi_5,
+            rsi_14,
+            historical_vol_5,
+            historical_vol_20,
+            atr_14,
+            obv[-1],
+            volume_ratio,
+            price_position,
+            volatility_ratio,
+            trend_strength,
+            volume_ratio_regime,
+            np.mean(closing_prices[-5:]) if len(closing_prices) >= 5 else 0,  # 5-day average price
+            np.mean(closing_prices[-10:]) if len(closing_prices) >= 10 else 0,  # 10-day average price
+            np.std(closing_prices[-5:]) if len(closing_prices) >= 5 else 0,  # Price volatility last 5 days
+            np.std(closing_prices[-10:]) if len(closing_prices) >= 10 else 0,  # Price volatility last 10 days
+            np.mean(daily_returns[-5:]) if len(daily_returns) >= 5 else 0,  # Average return last 5 days
+            np.mean(daily_returns[-10:]) if len(daily_returns) >= 10 else 0,  # Average return last 10 days
+            np.std(daily_returns[-5:]) if len(daily_returns) >= 5 else 0,  # Volatility last 5 days
+            np.std(daily_returns[-10:]) if len(daily_returns) >= 10 else 0,  # Volatility last 10 days
+            np.corrcoef(volumes, closing_prices)[0, 1] if len(volumes) > 1 else 0,  # Volume-price correlation
+        ]
+    ))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    position = enhanced_s[-1]  # Position flag
+    closing_prices = enhanced_s[0:20]
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    recent_return = daily_returns[-1] if len(daily_returns) > 0 else 0
+
+    # Calculate historical volatility for adaptive threshold
+    historical_vol = np.std(daily_returns) * 100 if len(daily_returns) > 0 else 0
+    threshold = 2 * historical_vol  # Volatility-adaptive threshold
+
+    reward = 0
+
+    if position == 0:  # Not holding
+        if recent_return > threshold:  # Strong uptrend
+            reward += 50
+        elif recent_return < -threshold:  # Sharp decline
+            reward -= 50
+    else:  # Holding
+        if recent_return < -threshold:  # Trend weakening; consider selling
+            reward -= 50
+        elif recent_return > threshold:  # Continue to hold in uptrend
+            reward += 25
+
+    # Penalize uncertain/choppy market conditions
+    if np.abs(recent_return) < (0.5 * threshold):  # Choppy condition
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Performance Metrics:
+  Sharpe Ratio: 0.907
+  Max Drawdown: 44.29%
+  Total Return: 60.67%
+  Number of Trades: 1
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 5 of 25 total):
+  new_feature_2: importance=0.053, corr=0.106
+  new_feature_4: importance=0.052, corr=0.104
+  new_feature_3: importance=0.052, corr=0.104
+  new_feature_0: importance=0.052, corr=0.104
+  new_feature_16: importance=0.052, corr=0.104
+
+========== Code Candidate -- 2 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    return np.convolve(prices, np.ones(window) / window, mode='valid')
+
+def calculate_ema(prices, window):
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[0] = prices[0]
+    for i in range(1, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema
+
+def calculate_rsi(prices, window):
+    deltas = np.diff(prices)
+    gain = np.where(deltas > 0, deltas, 0)
+    loss = np.where(deltas < 0, -deltas, 0)
+    
+    avg_gain = np.mean(gain[-window:]) if len(gain[-window:]) > 0 else 0
+    avg_loss = np.mean(loss[-window:]) if len(loss[-window:]) > 0 else 0
+    rs = avg_gain / avg_loss if avg_loss != 0 else 0
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_atr(highs, lows, closes, window):
+    tr = np.maximum(highs[1:] - lows[1:], 
+                    np.maximum(np.abs(highs[1:] - closes[:-1]), 
+                               np.abs(lows[1:] - closes[:-1])))
+    return np.mean(tr[-window:])
+
+def calculate_volatility(returns, window):
+    return np.std(returns[-window:]) * 100 if len(returns) >= window else np.nan
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    opening_prices = s[20:40]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    # Trend Indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    sma_20 = calculate_sma(closing_prices, 20)
+    ema_5 = calculate_ema(closing_prices, 5)
+    ema_10 = calculate_ema(closing_prices, 10)
+
+    # Momentum Indicators
+    rsi_5 = calculate_rsi(closing_prices, 5)
+    rsi_14 = calculate_rsi(closing_prices, 14)
+
+    # Volatility Indicators
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    historical_vol_5 = calculate_volatility(daily_returns, 5)
+    historical_vol_20 = calculate_volatility(daily_returns, 20)
+    atr_14 = calculate_atr(high_prices, low_prices, closing_prices, 14)
+
+    # Volume Indicators
+    obv = np.cumsum(np.where(np.diff(closing_prices) > 0, volumes[1:], -volumes[1:]))
+    volume_avg_5 = np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan
+    volume_avg_20 = np.mean(volumes[-20:]) if len(volumes) >= 20 else np.nan
+    volume_ratio = volumes[-1] / np.mean(volumes[-20:]) if np.mean(volumes[-20:]) > 0 else np.nan
+
+    # Market Regime Features
+    price_position = (closing_prices[-1] - np.min(closing_prices[-20:])) / (np.max(closing_prices[-20:]) - np.min(closing_prices[-20:])) if np.max(closing_prices[-20:]) != np.min(closing_prices[-20:]) else np.nan
+    trend_strength = np.corrcoef(closing_prices[-20:], range(len(closing_prices[-20:])))[:-1, -1][0] if len(closing_prices) >= 20 else np.nan
+    volatility_ratio = historical_vol_5 / historical_vol_20 if historical_vol_20 > 0 else np.nan
+
+    # New features
+    enhanced_s = np.concatenate((
+        s,  # Original state
+        [sma_5[-1] if len(sma_5) > 0 else np.nan,
+         sma_10[-1] if len(sma_10) > 0 else np.nan,
+         sma_20[-1] if len(sma_20) > 0 else np.nan,
+         ema_5[-1] if len(ema_5) > 0 else np.nan,
+         ema_10[-1] if len(ema_10) > 0 else np.nan,
+         rsi_5,
+         rsi_14,
+         historical_vol_5,
+         historical_vol_20,
+         atr_14,
+         obv[-1],
+         volume_ratio,
+         price_position,
+         trend_strength,
+         volatility_ratio,
+         np.mean(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan,  # 5-day average return
+         np.std(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan,  # 5-day return volatility
+         np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan,  # 5-day volume average
+         np.corrcoef(volumes, closing_prices)[0, 1] if len(volumes) > 1 else np.nan,  # Volume-price correlation
+         np.mean(closing_prices[-5:]) / np.mean(closing_prices) if np.mean(closing_prices) > 0 else np.nan  # Price ratio
+        ]
+    ))
+    
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    position_flag = enhanced_s[-1]  # Position flag
+    closing_prices = enhanced_s[0:20]
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]  # Daily returns
+    recent_return = daily_returns[-1] if len(daily_returns) > 0 else 0
+
+    # Calculate historical volatility for adaptive threshold
+    historical_vol = np.std(daily_returns) * 100 if len(daily_returns) > 0 else 0
+    threshold = 2 * historical_vol  # Volatility-adaptive threshold
+
+    reward = 0
+
+    if position_flag == 0.0:  # Not holding
+        if recent_return > threshold:  # Strong uptrend
+            reward += 50
+        elif recent_return < -threshold:  # Sharp decline
+            reward -= 50
+    else:  # Holding
+        if recent_return < -threshold:  # Trend weakening; consider selling
+            reward -= 50
+        elif recent_return > threshold:  # Continue to hold in uptrend
+            reward += 25
+
+    # Penalize uncertain/choppy market conditions
+    if np.abs(recent_return) < (0.5 * threshold):  # Choppy condition
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Performance Metrics:
+  Sharpe Ratio: 0.907
+  Max Drawdown: 44.29%
+  Total Return: 60.67%
+  Number of Trades: 1
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 5 of 20 total):
+  new_feature_18: importance=0.018, corr=0.036
+  new_feature_17: importance=0.015, corr=0.030
+  new_feature_11: importance=0.013, corr=0.024
+  new_feature_6: importance=0.010, corr=0.020
+  new_feature_5: importance=0.010, corr=0.019
+
+========== Code Candidate -- 3 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average."""
+    if len(prices) < window:
+        return np.nan
+    return np.mean(prices[-window:])
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average."""
+    if len(prices) < window:
+        return np.nan
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[0] = prices[0]  # Starting point
+    for i in range(1, len(prices)):
+        ema[i] = (prices[i] - ema[i-1]) * alpha + ema[i-1]
+    return ema[-1]
+
+def calculate_rsi(prices, window):
+    """Calculate Relative Strength Index."""
+    if len(prices) < window:
+        return np.nan
+    deltas = np.diff(prices)
+    gain = np.where(deltas > 0, deltas, 0)
+    loss = np.where(deltas < 0, -deltas, 0)
+    avg_gain = np.mean(gain[-window:]) if np.any(gain[-window:]) else 0
+    avg_loss = np.mean(loss[-window:]) if np.any(loss[-window:]) else 0
+    rs = avg_gain / avg_loss if avg_loss > 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, window):
+    """Calculate Average True Range."""
+    if len(highs) < window:
+        return np.nan
+    tr = np.maximum(highs[-window:] - lows[-window:], 
+                    np.maximum(np.abs(highs[-window:] - closes[-window:]), 
+                               np.abs(lows[-window:] - closes[-window:]))
+                   )
+    return np.mean(tr)
+
+def calculate_volatility(returns, window):
+    """Calculate historical volatility."""
+    if len(returns) < window:
+        return np.nan
+    return np.std(returns[-window:]) * 100
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    opening_prices = s[20:40]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    # Trend Indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    sma_20 = calculate_sma(closing_prices, 20)
+    ema_5 = calculate_ema(closing_prices, 5)
+    ema_10 = calculate_ema(closing_prices, 10)
+
+    # Momentum Indicators
+    rsi_5 = calculate_rsi(closing_prices, 5)
+    rsi_14 = calculate_rsi(closing_prices, 14)
+    momentum_5 = closing_prices[-1] - closing_prices[-6]  # 5-day momentum
+    momentum_10 = closing_prices[-1] - closing_prices[-11]  # 10-day momentum
+
+    # Volatility Indicators
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    historical_volatility_5 = calculate_volatility(daily_returns, 5)
+    historical_volatility_20 = calculate_volatility(daily_returns, 20)
+    atr_14 = calculate_atr(high_prices, low_prices, closing_prices, 14)
+
+    # Volume Indicators
+    obv = np.cumsum(np.where(np.diff(closing_prices) > 0, volumes[1:], -volumes[1:]))  # On-Balance Volume
+    volume_avg_5 = np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan
+    volume_avg_20 = np.mean(volumes[-20:]) if len(volumes) >= 20 else np.nan
+    volume_ratio = volumes[-1] / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # Market Regime Features
+    price_position = (closing_prices[-1] - np.min(closing_prices[-20:])) / (np.max(closing_prices[-20:]) - np.min(closing_prices[-20:])) if np.max(closing_prices[-20:]) != np.min(closing_prices[-20:]) else np.nan
+    volatility_ratio = historical_volatility_5 / historical_volatility_20 if historical_volatility_20 > 0 else np.nan
+    trend_strength = np.corrcoef(closing_prices[-20:], range(len(closing_prices[-20:])))[:-1, -1][0] if len(closing_prices) >= 20 else np.nan
+
+    # Collecting features
+    enhanced_s = np.concatenate((
+        s,
+        [sma_5, sma_10, sma_20, ema_5, ema_10,
+         rsi_5, rsi_14, historical_volatility_5, historical_volatility_20, atr_14,
+         obv[-1], volume_ratio, price_position,
+         volatility_ratio, trend_strength, momentum_5, momentum_10,
+         np.mean(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan,  # 5-day average return
+         np.std(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan,  # 5-day return volatility
+         np.mean(volumes[-5:]) / np.mean(volumes) if np.mean(volumes) > 0 else 0,  # Volume ratio
+         np.corrcoef(volumes, closing_prices)[0, 1] if len(volumes) > 1 else 0,  # Volume-price correlation
+         np.mean(closing_prices[-5:]) / np.mean(closing_prices) if np.mean(closing_prices) > 0 else 0,  # Price ratio
+         np.max(closing_prices[-20:]),  # Max price last 20 days
+         np.min(closing_prices[-20:]),  # Min price last 20 days
+         np.mean(daily_returns[-10:]) if len(daily_returns) >= 10 else np.nan  # Mean return last 10 days
+        ]
+    ))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    position = enhanced_s[-1]  # Position flag
+    closing_prices = enhanced_s[0:20]
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    recent_return = daily_returns[-1] if len(daily_returns) > 0 else 0
+
+    # Calculate historical volatility for adaptive threshold
+    historical_volatility = np.std(daily_returns) * 100 if len(daily_returns) > 0 else 0
+    threshold = 2 * historical_volatility  # Volatility-adaptive threshold
+
+    reward = 0
+
+    if position == 0:  # Not holding
+        if recent_return > threshold:  # Strong uptrend
+            reward += 50
+        elif recent_return < -threshold:  # Sharp decline
+            reward -= 50
+    else:  # Holding
+        if recent_return < -threshold:  # Trend weakening; consider selling
+            reward -= 50
+        elif recent_return > threshold:  # Continue to hold in uptrend
+            reward += 25
+
+    # Penalize uncertain/choppy market conditions
+    if np.abs(recent_return) < (0.5 * threshold):  # Choppy condition
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Performance Metrics:
+  Sharpe Ratio: 0.907
+  Max Drawdown: 44.29%
+  Total Return: 60.67%
+  Number of Trades: 1
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 5 of 25 total):
+  new_feature_7: importance=0.027, corr=0.053
+  new_feature_17: importance=0.027, corr=0.053
+  new_feature_18: importance=0.027, corr=0.053
+  new_feature_12: importance=0.026, corr=0.051
+  new_feature_24: importance=0.025, corr=0.049
+
+========== Code Candidate -- 4 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average."""
+    return np.convolve(prices, np.ones(window) / window, mode='valid')
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average."""
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[0] = prices[0]  # Starting point
+    for i in range(1, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema
+
+def calculate_rsi(prices, window):
+    """Calculate Relative Strength Index."""
+    deltas = np.diff(prices)
+    gain = np.where(deltas > 0, deltas, 0)
+    loss = np.where(deltas < 0, -deltas, 0)
+    avg_gain = np.mean(gain[-window:]) if len(gain[-window:]) > 0 else 0
+    avg_loss = np.mean(loss[-window:]) if len(loss[-window:]) > 0 else 0
+    rs = avg_gain / avg_loss if avg_loss > 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, window):
+    """Calculate Average True Range."""
+    tr = np.maximum(highs[1:] - lows[1:], 
+                    np.maximum(np.abs(highs[1:] - closes[:-1]), 
+                               np.abs(lows[1:] - closes[:-1])))
+    return np.mean(tr[-window:])
+
+def calculate_volatility(returns):
+    """Calculate historical volatility."""
+    return np.std(returns) * 100 if len(returns) > 0 else np.nan
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    opening_prices = s[20:40]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    # Trend Indicators
+    sma_5 = calculate_sma(closing_prices, 5)[-1] if len(closing_prices) >= 5 else np.nan
+    sma_10 = calculate_sma(closing_prices, 10)[-1] if len(closing_prices) >= 10 else np.nan
+    sma_20 = calculate_sma(closing_prices, 20)[-1] if len(closing_prices) >= 20 else np.nan
+    ema_5 = calculate_ema(closing_prices, 5)[-1] if len(closing_prices) >= 5 else np.nan
+    ema_10 = calculate_ema(closing_prices, 10)[-1] if len(closing_prices) >= 10 else np.nan
+
+    # Momentum Indicators
+    rsi_5 = calculate_rsi(closing_prices, 5) if len(closing_prices) >= 5 else np.nan
+    rsi_14 = calculate_rsi(closing_prices, 14) if len(closing_prices) >= 14 else np.nan
+
+    # Volatility Indicators
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]  # Daily returns
+    historical_vol_5 = calculate_volatility(daily_returns[-5:])
+    historical_vol_20 = calculate_volatility(daily_returns[-20:])
+    atr_14 = calculate_atr(high_prices, low_prices, closing_prices, 14)
+
+    # Volume Indicators
+    obv = np.cumsum(np.where(np.diff(closing_prices) > 0, volumes[1:], -volumes[1:]))  # On-Balance Volume
+    volume_avg_5 = np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan
+    volume_avg_20 = np.mean(volumes[-20:]) if len(volumes) >= 20 else np.nan
+    volume_ratio = volumes[-1] / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # Market Regime Features
+    price_position = (closing_prices[-1] - np.min(closing_prices[-20:])) / (np.max(closing_prices[-20:]) - np.min(closing_prices[-20:])) if np.max(closing_prices[-20:]) != np.min(closing_prices[-20:]) else np.nan
+    volatility_ratio = historical_vol_5 / historical_vol_20 if historical_vol_20 > 0 else np.nan
+    trend_strength = np.corrcoef(closing_prices[-20:], range(len(closing_prices[-20:])))[:-1, -1][0] if len(closing_prices) >= 20 else np.nan
+
+    # New Features
+    momentum_5 = np.mean(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan
+    momentum_10 = np.mean(daily_returns[-10:]) if len(daily_returns) >= 10 else np.nan
+    volatility_5 = np.std(daily_returns[-5:]) if len(daily_returns) >= 5 else np.nan
+    volatility_10 = np.std(daily_returns[-10:]) if len(daily_returns) >= 10 else np.nan
+
+    # Prepare enhanced state
+    enhanced_s = np.concatenate((
+        s,
+        [sma_5, sma_10, sma_20, ema_5, ema_10,
+         rsi_5, rsi_14, historical_vol_5, historical_vol_20, atr_14,
+         obv[-1], volume_ratio, price_position,
+         volatility_ratio, trend_strength, momentum_5, momentum_10,
+         volatility_5, volatility_10]
+    ))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    position = enhanced_s[-1]  # Position flag
+    closing_prices = enhanced_s[0:20]
+    recent_return = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] * 100  # Recent return in percentage
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]  # Daily returns
+    historical_volatility = calculate_volatility(daily_returns)  # Historical volatility
+
+    # Define adaptive thresholds based on historical volatility
+    threshold = 2 * historical_volatility
+
+    reward = 0
+
+    if position == 0:  # Not holding
+        if recent_return > threshold:  # Strong buy signal
+            reward += 50
+        elif recent_return < -threshold:  # Strong sell signal
+            reward -= 50
+    else:  # Holding
+        if recent_return < -threshold:  # Significant drop
+            reward -= 50  # Penalty for holding during a significant drop
+        elif recent_return > threshold:  # Strong uptrend
+            reward += 25  # Reward for holding in an uptrend
+        else:  # Maintain position
+            reward += 10  # Small reward for holding
+
+    # Penalize uncertain market conditions
+    if np.abs(recent_return) < (0.5 * threshold):  # Choppy condition
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Performance Metrics:
+  Sharpe Ratio: 0.696
+  Max Drawdown: 20.85%
+  Total Return: 28.08%
+  Number of Trades: 105
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 5 of 19 total):
+  new_feature_5: importance=0.032, corr=0.063
+  new_feature_11: importance=0.021, corr=0.041
+  new_feature_13: importance=0.016, corr=0.030
+  new_feature_1: importance=0.013, corr=0.025
+  new_feature_2: importance=0.012, corr=0.024
+
+========== Code Candidate -- 5 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    return np.convolve(prices, np.ones(window) / window, mode='valid')
+
+def calculate_ema(prices, window):
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[0] = prices[0]
+    for i in range(1, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema
+
+def calculate_rsi(prices, window):
+    deltas = np.diff(prices)
+    gain = np.where(deltas > 0, deltas, 0)
+    loss = np.where(deltas < 0, -deltas, 0)
+    avg_gain = np.mean(gain[-window:]) if len(gain[-window:]) > 0 else 0
+    avg_loss = np.mean(loss[-window:]) if len(loss[-window:]) > 0 else 0
+    rs = avg_gain / avg_loss if avg_loss != 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, window):
+    tr = np.maximum(highs[1:] - lows[1:], 
+                    np.maximum(np.abs(highs[1:] - closes[:-1]), 
+                               np.abs(lows[1:] - closes[:-1])))
+    return np.mean(tr[-window:])
+
+def calculate_volatility(returns, window):
+    return np.std(returns[-window:]) * 100 if len(returns) >= window else np.nan
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    opening_prices = s[20:40]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+    
+    # Trend Indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    sma_20 = calculate_sma(closing_prices, 20)
+    ema_5 = calculate_ema(closing_prices, 5)
+    ema_10 = calculate_ema(closing_prices, 10)
+
+    # Momentum Indicators
+    rsi_5 = calculate_rsi(closing_prices, 5)
+    rsi_14 = calculate_rsi(closing_prices, 14)
+    momentum_5 = closing_prices[-1] - closing_prices[-6]  # 5-day momentum
+    momentum_10 = closing_prices[-1] - closing_prices[-11]  # 10-day momentum
+
+    # Volatility Indicators
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]
+    historical_volatility = calculate_volatility(daily_returns, 20)
+    atr_14 = calculate_atr(high_prices, low_prices, closing_prices, 14)
+
+    # Volume Indicators
+    obv = np.cumsum(np.where(np.diff(closing_prices) > 0, volumes[1:], -volumes[1:]))
+    volume_avg_5 = np.mean(volumes[-5:]) if len(volumes) >= 5 else np.nan
+    volume_avg_20 = np.mean(volumes[-20:]) if len(volumes) >= 20 else np.nan
+    volume_ratio = volumes[-1] / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # Market Regime Features
+    price_position = (closing_prices[-1] - np.min(closing_prices[-20:])) / (np.max(closing_prices[-20:]) - np.min(closing_prices[-20:])) if np.max(closing_prices[-20:]) != np.min(closing_prices[-20:]) else np.nan
+    volatility_ratio = historical_volatility / (calculate_volatility(daily_returns, 5) if len(daily_returns) >= 5 else np.nan)
+    trend_strength = np.corrcoef(closing_prices[-20:], range(len(closing_prices[-20:])))[:-1, -1][0] if len(closing_prices) >= 20 else np.nan
+    volume_ratio_regime = volume_avg_5 / volume_avg_20 if volume_avg_20 > 0 else np.nan
+
+    # Enhanced state
+    enhanced_s = np.concatenate((
+        s,
+        [sma_5[-1] if len(sma_5) > 0 else 0,
+         sma_10[-1] if len(sma_10) > 0 else 0,
+         sma_20[-1] if len(sma_20) > 0 else 0,
+         ema_5[-1] if len(ema_5) > 0 else 0,
+         ema_10[-1] if len(ema_10) > 0 else 0,
+         rsi_5,
+         rsi_14,
+         historical_volatility,
+         atr_14,
+         obv[-1],
+         volume_ratio,
+         price_position,
+         volatility_ratio,
+         trend_strength,
+         momentum_5,
+         momentum_10,
+         np.std(daily_returns[-5:]) if len(daily_returns) >= 5 else 0,  # 5-day return volatility
+         np.mean(daily_returns[-5:]) if len(daily_returns) >= 5 else 0,  # 5-day average return
+         np.mean(volumes[-5:]) if len(volumes) >= 5 else 0  # 5-day average volume
+        ]
+    ))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    position = enhanced_s[-1]  # Position flag
+    closing_prices = enhanced_s[0:20]
+    daily_returns = np.diff(closing_prices) / closing_prices[:-1]  # Daily returns
+    recent_return = daily_returns[-1] if len(daily_returns) > 0 else 0
+
+    # Calculate historical volatility for adaptive threshold
+    historical_volatility = np.std(daily_returns) * 100 if len(daily_returns) > 0 else 0
+    threshold = 2 * historical_volatility  # Volatility-adaptive threshold
+
+    reward = 0
+
+    if position == 0.0:  # Not holding
+        if recent_return > threshold:  # Strong uptrend
+            reward += 50
+        elif recent_return < -threshold:  # Sharp decline
+            reward -= 50
+    else:  # Holding
+        if recent_return < -threshold:  # Trend weakening; consider selling
+            reward -= 50
+        elif recent_return > threshold:  # Continue to hold in uptrend
+            reward += 25
+
+    # Penalize uncertain/choppy market conditions
+    if np.abs(recent_return) < (0.5 * threshold):  # Choppy condition
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Performance Metrics:
+  Sharpe Ratio: 0.907
+  Max Drawdown: 44.29%
+  Total Return: 60.67%
+  Number of Trades: 1
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 5 of 19 total):
+  new_feature_9: importance=0.045, corr=0.089
+  new_feature_13: importance=0.040, corr=0.079
+  new_feature_5: importance=0.037, corr=0.073
+  new_feature_14: importance=0.026, corr=0.052
+  new_feature_8: importance=0.022, corr=0.044
+
+
+
+Please analyze the results above and provide improvement suggestions:
+
+Analysis Points:
+(a) Why do certain codes perform better? Which features contribute most?
+(b) What are the common problems of low-performance codes? (e.g., redundant features, overfitting, missing key signals)
+(c) How to improve state representation and intrinsic reward design?
+(d) Are there too many or too few trades? How to adjust the reward function to control trade frequency?
+
+Financial Scene Special Notes:
+- Trend features (momentum, moving averages) are important for timing
+- Volatility features help with risk control
+- Volume can confirm price trends
+- Market regime features help identify when to trade vs. when to stay out
+- intrinsic_reward should use the position flag to differentiate buy/sell signals
+- **Use relative thresholds based on historical volatility** - different stocks have different risk profiles
+- **Avoid both under-trading (0 trades) and over-trading (too many noisy trades)**
+
+Goal: Improve the strategy's Sharpe ratio while keeping maximum drawdown under 30%.

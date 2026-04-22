@@ -1,0 +1,57 @@
+# Exp4.7 Configuration for NFLX-only experiment
+
+# Data configuration
+data:
+  pickle_file: "data/finmem_data/stock_data_cherrypick_2000_2024.pkl"
+
+# Experiment configuration
+experiment:
+  tickers:
+    - NFLX
+
+  train_period: ["2018-01-01", "2020-12-31"]
+  val_period: ["2021-01-01", "2022-12-31"]
+  test_period: ["2023-01-01", "2023-12-31"]
+
+  sample_count: 6
+  max_iterations: 3
+  init_min_valid: 3    # Iteration 0 minimum valid samples
+  init_max_rounds: 5   # Max re-generation rounds for init
+
+# LLM configuration
+llm:
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 2000
+  base_url: "https://api.chatanywhere.com.cn/v1"
+  api_key: "sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL"
+
+# DQN training parameters
+dqn:
+  state_dim: 120
+  action_dim: 3
+  hidden_dim: 256
+  batch_size: 64
+  gamma: 0.99
+  tau: 0.005
+  lr: 0.001
+  epsilon_start: 1.0
+  epsilon_end: 0.1
+  epsilon_decay: 0.995
+  max_episodes: 50
+
+# Intrinsic reward parameters
+intrinsic:
+  weight: 0.1
+
+# Backtest configuration
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  min_commission: 0.99
+
+# Output configuration
+output:
+  output_dir: "exp4.7/results_nflx_only_new"
+  log_dir: "logs"
+  save_results: true

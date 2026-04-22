@@ -119,22 +119,27 @@ def check_prompt_for_leakage(prompt_text: str) -> list:
 def _train_ticker_worker(args):
     """Worker for parallel training using closures (no importlib/tempfile).
 
-    Receives a revise_fn closure directly instead of code strings.
+    Receives selection JSON (serializable) and rebuilds closure in-process.
     Per D-21: no exec/eval, no tempfile, no importlib.
     Per D-22: uses compute_fixed_reward (no intrinsic_reward_func).
     """
-    ticker, revise_fn, state_dim, gpu_id, data_pkl_path, \
-        train_start, train_end, val_start, val_end, sample_id, max_episodes = args
+    ticker, selection, state_dim, gpu_id, data_pkl_path, \
+        train_start, train_end, val_start, val_end, test_start, test_end, sample_id, max_episodes = args
 
     try:
         device = f'cuda:{gpu_id}' if torch.cuda.is_available() else 'cpu'
         if torch.cuda.is_available():
             torch.cuda.set_device(gpu_id)
 
+        sys.path.insert(0, str(Path(__file__).parent))
         sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'FINSABER'))
         from backtest.data_util.finmem_dataset import FinMemDataset
+        from feature_library import build_revise_state
 
         data_loader = FinMemDataset(pickle_file=data_pkl_path)
+
+        # Rebuild closure from selection JSON in this process
+        revise_fn = build_revise_state(selection)
 
         # D-22: No intrinsic_reward_func, uses compute_fixed_reward internally
         trainer = DQNTrainer(
@@ -146,6 +151,7 @@ def _train_ticker_worker(args):
 
         trainer.train(data_loader, train_start, train_end, max_episodes=max_episodes)
         val_metrics = trainer.evaluate(data_loader, val_start, val_end)
+        test_metrics = trainer.evaluate(data_loader, test_start, test_end)
 
         summary = trainer._get_summary()
 
@@ -153,6 +159,8 @@ def _train_ticker_worker(args):
             'sample_id': sample_id, 'ticker': ticker,
             'sharpe': val_metrics['sharpe'], 'max_dd': val_metrics['max_dd'],
             'total_return': val_metrics['total_return'],
+            'test_sharpe': test_metrics['sharpe'], 'test_max_dd': test_metrics['max_dd'],
+            'test_total_return': test_metrics['total_return'],
             'states': summary['states'][:100],
             'rewards': summary['rewards'][:100],
             'regimes': summary['regimes'][:100],
@@ -273,8 +281,8 @@ class LESRController:
         logger.info(f"Config: {self.n_candidates} candidates x {self.max_iterations} iterations")
         logger.info("=" * 50)
 
-        # Get training states for market stats and screening
-        training_states = self._get_training_states()
+        # Get training states and forward returns for market stats and screening
+        training_states, training_forward_returns = self._get_training_states()
 
         for iteration in range(self.max_iterations):
             logger.info(f"\n=== Iteration {iteration} ===")
@@ -298,7 +306,7 @@ class LESRController:
                 logger.warning(f"Pre-call leakage check found: {leaks}")
 
             # Sample candidates
-            candidates = self._sample_candidates(prompt, training_states)
+            candidates, rejected = self._sample_candidates(prompt, training_states, training_forward_returns)
             if not candidates:
                 logger.warning("No valid candidates, skipping iteration")
                 continue
@@ -315,12 +323,32 @@ class LESRController:
             screening_reports = [c.get('screening_report', {}) for c in candidates]
             stability_reports = [c.get('stability_report', {}) for c in candidates]
 
+            # Add rejected candidates to COT feedback (for indicator name errors)
+            rejected_selections = []
+            for r in rejected:
+                # Parse rejected LLM text to extract features if possible
+                try:
+                    from prompts import _extract_json
+                    parsed = _extract_json(r['llm_text'])
+                    if 'features' in parsed:
+                        rejected_selections.append({
+                            'features': parsed['features'],
+                            'errors': r['errors'],
+                        })
+                except:
+                    # If parsing fails, create minimal entry with errors
+                    rejected_selections.append({
+                        'features': [],
+                        'errors': r['errors'],
+                    })
+
             # D-12: Batch COT feedback across all candidates
             cot = get_cot_feedback(
-                selections=[c['selection'] for c in candidates],
+                selections=[{'features': c['selection']} for c in candidates],
                 scores=scores,
                 screening_reports=screening_reports,
-                stability_reports=stability_reports
+                stability_reports=stability_reports,
+                rejected_selections=rejected_selections,
             )
             self.all_iter_cot_feedback.append(cot)
 
@@ -346,12 +374,18 @@ class LESRController:
 
         return self._select_best_strategy()
 
-    def _get_training_states(self) -> np.ndarray:
-        """Extract training states for market stats computation."""
+    def _get_training_states(self) -> tuple:
+        """Extract training states and forward returns for market stats computation.
+
+        Returns:
+            (states, forward_returns): states is (N, 120) array, forward_returns is (N,) array
+        """
         try:
             dates = [d for d in self.data_loader.get_date_range()
                      if self.train_period[0] <= str(d) <= self.train_period[1]]
             states = []
+            prices = []
+
             for date in dates[:50]:  # Sample up to 50 dates for stats
                 for ticker in self.tickers:
                     daily_data = self.data_loader.get_data_by_date(date)
@@ -363,19 +397,32 @@ class LESRController:
                             close = float(price_dict)
                         # Simplified 6d state for market stats
                         states.append(np.array([close] * 6 + [0] * 114))
-            if states:
-                return np.array(states)
-            return np.zeros((1, 120))
-        except Exception:
-            return np.zeros((1, 120))
+                        prices.append(close)
 
-    def _sample_candidates(self, prompt, training_states) -> list:
+            if states and len(prices) > 1:
+                states_arr = np.array(states)
+                # Compute forward returns: (price[t+1] - price[t]) / price[t]
+                prices_arr = np.array(prices)
+                forward_returns = np.zeros(len(prices_arr))
+                forward_returns[:-1] = (prices_arr[1:] - prices_arr[:-1]) / (prices_arr[:-1] + 1e-8)
+                return states_arr, forward_returns
+            return np.zeros((1, 120)), np.zeros(1)
+        except Exception:
+            return np.zeros((1, 120)), np.zeros(1)
+
+    def _sample_candidates(self, prompt, training_states, forward_returns) -> list:
         """Sample n_candidates from LLM, validate, screen, and assess stability.
 
         Per D-24: n_candidates=3 per round.
         Returns list of candidate dicts with selection, revise_fn, state_dim, reports.
+
+        Args:
+            prompt: LLM prompt text
+            training_states: (N, 120) array of training states
+            forward_returns: (N,) array of actual forward returns for IC computation
         """
         valid_candidates = []
+        rejected_candidates = []  # Track rejected candidates for COT feedback
 
         for c_idx in range(self.n_candidates):
             logger.info(f"Candidate {c_idx+1}/{self.n_candidates}: calling LLM...")
@@ -389,14 +436,19 @@ class LESRController:
             result = validate_selection(text, self._sample_state)
             if result['errors'] or not result['selection']:
                 logger.error(f"  Validation failed: {result['errors']}")
+                # Track rejected candidate for COT feedback
+                rejected_candidates.append({
+                    'llm_text': text,
+                    'errors': result['errors'],
+                    'selection': result.get('selection', []),
+                })
                 continue
 
             selection = result['selection']
             revise_fn = result['revise_state']
             state_dim = result['state_dim']
 
-            # Screen features by IC/variance (D-06, D-07, D-08)
-            forward_returns = np.random.randn(len(training_states)) * 0.01
+            # Screen features by IC/variance (D-06, D-07, D-08) using REAL forward returns
             screening = screen_features(selection, revise_fn, training_states, forward_returns)
 
             # Use screened selection if enough features pass
@@ -416,7 +468,7 @@ class LESRController:
             else:
                 logger.info(f"  Only {len(screened)} features passed screening, using all validated")
 
-            # Assess stability (D-14, D-15, D-16)
+            # Assess stability (D-14, D-15, D-16) using REAL forward returns
             stability = assess_stability(selection, revise_fn, training_states, forward_returns)
 
             # Remove unstable features per D-16
@@ -450,7 +502,7 @@ class LESRController:
 
             logger.info(f"  Valid: {len(selection)} features, state_dim={state_dim}")
 
-        return valid_candidates
+        return valid_candidates, rejected_candidates
 
     def _parallel_train(self, candidates, iteration):
         """Train all candidates across all tickers.
@@ -473,10 +525,11 @@ class LESRController:
                 tasks = []
                 for gpu_id, ticker in enumerate(self.tickers):
                     tasks.append((
-                        ticker, candidate['revise_fn'], candidate['state_dim'], gpu_id,
+                        ticker, candidate['selection'], candidate['state_dim'], gpu_id,
                         self.data_pkl_path,
                         self.train_period[0], self.train_period[1],
                         self.val_period[0], self.val_period[1],
+                        self.test_period[0], self.test_period[1],
                         i, 50
                     ))
 
@@ -504,9 +557,11 @@ class LESRController:
                         'sample_id': i, 'ticker': wr['ticker'],
                         'sharpe': wr['sharpe'], 'max_dd': wr['max_dd'],
                         'total_return': wr['total_return'],
+                        'test_sharpe': wr['test_sharpe'], 'test_max_dd': wr['test_max_dd'],
+                        'test_total_return': wr['test_total_return'],
                         'trainer': trainer
                     })
-                    logger.info(f"  [{wr['ticker']}] Sharpe={wr['sharpe']:.3f}")
+                    logger.info(f"  [{wr['ticker']}] Val Sharpe={wr['sharpe']:.3f} | Test Sharpe={wr['test_sharpe']:.3f}")
             else:
                 # Single-GPU or CPU path
                 for ticker in self.tickers:
@@ -522,14 +577,19 @@ class LESRController:
                                      self.train_period[1], max_episodes=50)
                         val_metrics = trainer.evaluate(self.data_loader,
                                                       self.val_period[0], self.val_period[1])
+                        test_metrics = trainer.evaluate(self.data_loader,
+                                                       self.test_period[0], self.test_period[1])
                         results.append({
                             'sample_id': i, 'ticker': ticker,
                             'sharpe': val_metrics['sharpe'],
                             'max_dd': val_metrics['max_dd'],
                             'total_return': val_metrics['total_return'],
+                            'test_sharpe': test_metrics['sharpe'],
+                            'test_max_dd': test_metrics['max_dd'],
+                            'test_total_return': test_metrics['total_return'],
                             'trainer': trainer
                         })
-                        logger.info(f"  [{ticker}] Sharpe={val_metrics['sharpe']:.3f}")
+                        logger.info(f"  [{ticker}] Val Sharpe={val_metrics['sharpe']:.3f} | Test Sharpe={test_metrics['sharpe']:.3f}")
                     except Exception as e:
                         logger.error(f"  [{ticker}] Failed: {e}")
         return results
@@ -600,7 +660,7 @@ class LESRController:
 
     def _select_best_strategy(self):
         """Select best strategy across all iterations by Sharpe ratio."""
-        best_sharpe, best_cfg = -float('inf'), None
+        best_sharpe, best_cfg, best_iteration = -float('inf'), None, 0
         for it in range(self.max_iterations):
             # Try JSON first, fall back to pickle
             json_path = os.path.join(self.output_dir, f'iteration_{it}', 'results.json')
@@ -618,8 +678,14 @@ class LESRController:
                 for r in data.get('results', []):
                     if r.get('sharpe', 0) > best_sharpe:
                         best_sharpe = r['sharpe']
-                        best_cfg = r
+                        best_cfg = r.copy()
+                        best_iteration = it
 
         if best_cfg:
-            logger.info(f"Best: It{best_cfg.get('sample_id', 0)}, Sharpe={best_sharpe:.3f}")
+            # Ensure all required fields are present
+            best_cfg['iteration'] = best_iteration
+            best_cfg.setdefault('sharpe', best_sharpe)
+            best_cfg.setdefault('max_dd', 0.0)
+            best_cfg.setdefault('total_return', 0.0)
+            logger.info(f"Best: It{best_iteration}, Sharpe={best_sharpe:.3f}")
         return best_cfg

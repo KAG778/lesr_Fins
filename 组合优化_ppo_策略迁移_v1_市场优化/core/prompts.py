@@ -215,15 +215,14 @@ Besides, we want you to design two functions:
 
 IMPORTANT for intrinsic_reward design:
 - The intrinsic_reward should help the RL agent learn BETTER states, not just amplify returns.
-- If the Market Strategy Guidance above indicates high risk (Defensive/Crisis regime),
-  your intrinsic_reward should penalize states with high volatility or downside risk.
+- Design it to reflect the quality of the state representation itself.
 - A good intrinsic_reward correlates with (but is not identical to) future portfolio performance.
 
 IMPORTANT for market_strategy design:
-- Use market_state dimensions to detect regime (e.g., risk_level, volatility_level)
-- Be defensive when risk_level > 0.5 or volatility_ratio > 1.5
-- Be aggressive only when trend_direction > 0.3 AND volatility_level < 0.3
-- Keep it simple — 3-5 conditions is enough
+- Interpret each dimension of market_state based on its semantic meaning and the Market Statistics above.
+- Design your risk scaling logic freely — you decide when to be conservative or aggressive.
+- The market_state vector captures trend, volatility, risk, correlation, breadth, and vol ratio.
+- Your strategy should adapt to the market conditions shown in the statistics.
 
 Your task is to create THREE Python functions: revise_state, intrinsic_reward, and market_strategy.
 
@@ -236,12 +235,9 @@ def intrinsic_reward(updated_s):
     # Stock-level reward signal
     return float_reward
 def market_strategy(market_state, weights):
-    # Market-level risk scaling
-    # market_state: [trend, vol, risk, corr, breadth, vol_ratio]
-    risk_level = market_state[2]
-    vol_ratio = market_state[5]
-    if risk_level > 0.6 or vol_ratio > 1.5:
-        return 0.5
+    # Market-level risk scaling based on market_state dimensions
+    # Interpret market_state semantics and current Market Statistics to decide risk_scale
+    # Return a float in [0.3, 2.0]
     return 1.0
 ```"""
 
@@ -311,8 +307,7 @@ we have tried in the former iterations:
 Based on the former suggestions. We are seeking an improved state revision code, an improved
 intrinsic reward code, and an improved market_strategy function.
 
-NOTE for intrinsic_reward: Follow the Market Strategy Guidance above. In high-risk regimes,
-penalize volatile states; in favorable regimes, reward exploration of informative features.
+NOTE for intrinsic_reward: Adapt your reward design to the market conditions shown above.
 
 Your task is to create THREE Python functions: revise_state, intrinsic_reward, and market_strategy.
 

@@ -1,0 +1,28 @@
+========================================
+exp_4.9_b 监控报告 2026-04-17 00:40:01
+========================================
+运行中进程: 0/10
+
+W1: ✓ 已完成
+  → [MSFT] Sharpe: 0.759, MaxDD: 15.07%, Trades: 36
+W2: ✓ 已完成
+  → [MSFT] Sharpe: 1.394, MaxDD: 13.93%, Trades: 1
+W3: ✓ 已完成
+  → [MSFT] Sharpe: 0.343, MaxDD: 41.01%, Trades: 1
+W4: ✓ 已完成
+  → [MSFT] Sharpe: 0.374, MaxDD: 37.03%, Trades: 1
+W5: ✓ 已完成
+  → [MSFT] Sharpe: 0.978, MaxDD: 18.31%, Trades: 1
+W6: ✓ 已完成
+  → [MSFT] Sharpe: 1.367, MaxDD: 28.75%, Trades: 1
+W7: ✓ 已完成
+  → [MSFT] Sharpe: 1.435, MaxDD: 6.01%, Trades: 128
+W8: ✓ 已完成
+  → [MSFT] Sharpe: 1.437, MaxDD: 18.51%, Trades: 1
+W9: ✓ 已完成
+  → [MSFT] Sharpe: 0.210, MaxDD: 18.36%, Trades: 39
+W10: ✓ 已完成
+  → [MSFT] Sharpe: -0.172, MaxDD: 29.68%, Trades: 1
+
+=== 已完成窗口 ===
+========================================

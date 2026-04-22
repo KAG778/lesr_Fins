@@ -1,0 +1,13 @@
+pandas
+numpy
+torch
+scikit-learn
+shap
+matplotlib
+tabulate
+pyyaml
+colorlog
+rich
+openai==0.28
+backtrader
+datasets

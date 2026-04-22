@@ -1,0 +1,313 @@
+"""
+Feature Engine for exp4.9_d
+
+Fixed pre-computation of technical indicators from OHLCV data.
+LLM no longer generates these — only designs intrinsic_reward.
+
+All features are computed from the 120-dim raw state:
+- s[0:19]:  20 days close prices
+- s[20:39]: 20 days open prices
+- s[40:59]: 20 days high prices
+- s[60:79]: 20 days low prices
+- s[80:99]: 20 days volume
+- s[100:119]: 20 days adjusted close
+
+Output: 30-dimensional feature vector (indices 120-149)
+"""
+
+import numpy as np
+
+
+def compute_features(s: np.ndarray) -> np.ndarray:
+    """
+    Compute 30 technical indicator features from 120-dim raw state.
+
+    Returns:
+        30-dimensional numpy array of features
+    """
+    close = s[0:20].astype(float)
+    open_ = s[20:40].astype(float)
+    high = s[40:60].astype(float)
+    low = s[60:80].astype(float)
+    volume = s[80:100].astype(float)
+    adj_close = s[100:120].astype(float)
+
+    features = []
+
+    # === A. Trend Indicators (8 features) ===
+    # A1-A3: SMA 5/10/20
+    sma5 = _sma(close, 5)
+    sma10 = _sma(close, 10)
+    sma20 = _sma(close, 20)
+    features.extend([sma5, sma10, sma20])
+
+    # A4-A5: EMA 5/20
+    ema5 = _ema(close, 5)
+    ema20 = _ema(close, 20)
+    features.extend([ema5, ema20])
+
+    # A6: Price / SMA20 deviation
+    price_sma20_dev = _safe_div(close[-1] - sma20, sma20)
+    features.append(price_sma20_dev)
+
+    # A7: SMA5 - SMA20 (short vs long trend)
+    sma_cross = _safe_div(sma5 - sma20, sma20)
+    features.append(sma_cross)
+
+    # A8: Price / SMA10 deviation
+    price_sma10_dev = _safe_div(close[-1] - sma10, sma10)
+    features.append(price_sma10_dev)
+
+    # === B. Momentum Indicators (7 features) ===
+    # B1-B3: RSI 5/10/14
+    rsi5 = _rsi(close, 5)
+    rsi10 = _rsi(close, 10)
+    rsi14 = _rsi(close, 14)
+    features.extend([rsi5, rsi10, rsi14])
+
+    # B4-B6: MACD line, signal, histogram
+    macd_line, macd_signal, macd_hist = _macd(close)
+    features.extend([macd_line, macd_signal, macd_hist])
+
+    # B7: Momentum (10-day rate of change)
+    mom10 = _safe_div(close[-1] - close[-11], close[-11]) if len(close) >= 11 else 0.0
+    features.append(mom10)
+
+    # === C. Volatility Indicators (5 features) ===
+    # C1-C2: Historical volatility 5/20 day
+    vol5 = _hist_vol(close, 5)
+    vol20 = _hist_vol(close, 20)
+    features.extend([vol5, vol20])
+
+    # C3: ATR 14
+    atr14 = _atr(high, low, close, 14)
+    features.append(atr14)
+
+    # C4: Volatility ratio (5d / 20d)
+    vol_ratio = _safe_div(vol5, vol20)
+    features.append(vol_ratio)
+
+    # C5: Volatility change (current 5d vs previous 5d)
+    vol_prev = _hist_vol(close[:15], 5) if len(close) >= 15 else vol5
+    vol_change = _safe_div(vol5 - vol_prev, vol_prev)
+    features.append(vol_change)
+
+    # === D. Volume-Price Relationship (4 features) ===
+    # D1: OBV trend (simplified: correlation of volume and price direction)
+    obv_trend = _obv_trend(close, volume)
+    features.append(obv_trend)
+
+    # D2: Volume-price correlation
+    vp_corr = _corr(close, volume)
+    features.append(vp_corr)
+
+    # D3: Volume ratio (recent 5d / 20d average)
+    vol_avg5 = np.mean(volume[-5:]) if len(volume) >= 5 else np.mean(volume)
+    vol_avg20 = np.mean(volume)
+    vol_ratio_v = _safe_div(vol_avg5, vol_avg20)
+    features.append(vol_ratio_v)
+
+    # D4: Relative volume (current vs 20d std)
+    vol_std = np.std(volume) + 1e-10
+    rel_vol = _safe_div(volume[-1] - np.mean(volume), vol_std)
+    features.append(rel_vol)
+
+    # === E. Market Regime Detection (6 features) ===
+    # E1: Volatility ratio (5d vol / 20d vol, already computed as C4, but regime-specific)
+    regime_vol_ratio = vol_ratio  # reuse
+    features.append(regime_vol_ratio)
+
+    # E2: Trend strength (R² of linear regression on closing prices)
+    trend_r2 = _trend_strength(close)
+    features.append(trend_r2)
+
+    # E3: Price position within 20-day range [0, 1]
+    price_min = np.min(close)
+    price_max = np.max(close)
+    price_range = price_max - price_min
+    price_pos = _safe_div(close[-1] - price_min, price_range)
+    features.append(price_pos)
+
+    # E4: Volume regime (5d avg / 20d avg, already D3)
+    regime_vol_ratio_v = vol_ratio_v
+    features.append(regime_vol_ratio_v)
+
+    # E5: Trend direction (linear regression slope)
+    trend_slope = _trend_slope(close)
+    features.append(trend_slope)
+
+    # E6: Mean reversion signal (price vs Bollinger Band)
+    bb_pos = _bollinger_position(close, 20)
+    features.append(bb_pos)
+
+    # Ensure exactly 30 features
+    result = np.array(features, dtype=float)
+    assert len(result) == 30, f"Expected 30 features, got {len(result)}"
+
+    # Replace NaN/Inf with 0
+    result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+
+    return result
+
+
+def revise_state(s: np.ndarray) -> np.ndarray:
+    """
+    Revise raw 120-dim state by appending 30 pre-computed features.
+    Total output: 150 dimensions.
+
+    This function is FIXED — not generated by LLM.
+    """
+    features = compute_features(s)
+    return np.concatenate([s, features])
+
+
+# Pre-computed state dimension (for DQN initialization)
+STATE_DIM = 150  # 120 raw + 30 features
+ORIGINAL_DIM = 120
+
+
+# ==============================================================================
+# Feature computation helpers
+# ==============================================================================
+
+def _safe_div(a, b, default=0.0):
+    """Safe division handling zero denominator."""
+    if abs(b) < 1e-10:
+        return default
+    return a / b
+
+
+def _sma(prices, window):
+    """Simple Moving Average."""
+    if len(prices) < window:
+        return np.mean(prices)
+    return np.mean(prices[-window:])
+
+
+def _ema(prices, window):
+    """Exponential Moving Average."""
+    if len(prices) < window:
+        return np.mean(prices)
+    alpha = 2.0 / (window + 1)
+    ema = prices[-window]
+    for p in prices[-window + 1:]:
+        ema = alpha * p + (1 - alpha) * ema
+    return ema
+
+
+def _rsi(prices, window):
+    """Relative Strength Index."""
+    if len(prices) < window + 1:
+        return 50.0  # Neutral
+    deltas = np.diff(prices[-(window + 1):])
+    gains = np.where(deltas > 0, deltas, 0.0)
+    losses = np.where(deltas < 0, -deltas, 0.0)
+    avg_gain = np.mean(gains)
+    avg_loss = np.mean(losses)
+    if avg_loss < 1e-10:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _macd(prices):
+    """MACD indicator."""
+    ema12 = _ema(prices, 12)
+    ema26 = _ema(prices, 26)
+    macd_line = ema12 - ema26
+    # Signal line (9-period EMA of MACD - approximate with current MACD)
+    macd_signal = _ema(prices, 9) - _ema(prices, 18)  # simplified
+    macd_hist = macd_line - macd_signal
+    return macd_line, macd_signal, macd_hist
+
+
+def _atr(high, low, close, window):
+    """Average True Range."""
+    if len(close) < 2:
+        return 0.0
+    tr = np.maximum(
+        high[-window:] - low[-window:],
+        np.maximum(
+            np.abs(high[-window:] - close[-window:]),
+            np.abs(low[-window:] - close[-window:])
+        )
+    )
+    return np.mean(tr)
+
+
+def _hist_vol(prices, window):
+    """Historical volatility (std of returns)."""
+    if len(prices) < window + 1:
+        returns = np.diff(prices) / (prices[:-1] + 1e-10)
+        return np.std(returns) if len(returns) > 0 else 0.0
+    recent = prices[-(window + 1):]
+    returns = np.diff(recent) / (recent[:-1] + 1e-10)
+    return np.std(returns)
+
+
+def _obv_trend(close, volume):
+    """OBV trend: correlation of cumulative volume direction and price."""
+    if len(close) < 3:
+        return 0.0
+    direction = np.sign(np.diff(close))
+    obv = np.cumsum(direction * volume[1:])
+    # Return slope of OBV
+    x = np.arange(len(obv))
+    if len(x) < 2:
+        return 0.0
+    slope = np.polyfit(x, obv, 1)[0]
+    return slope / (np.std(obv) + 1e-10)
+
+
+def _corr(a, b):
+    """Pearson correlation."""
+    if len(a) < 3:
+        return 0.0
+    a_centered = a - np.mean(a)
+    b_centered = b - np.mean(b)
+    denom = np.std(a) * np.std(b)
+    if abs(denom) < 1e-10:
+        return 0.0
+    return np.mean(a_centered * b_centered) / denom
+
+
+def _trend_strength(prices):
+    """R² of linear regression on prices (trend strength)."""
+    if len(prices) < 3:
+        return 0.0
+    x = np.arange(len(prices), dtype=float)
+    y = prices
+    slope, intercept = np.polyfit(x, y, 1)
+    y_pred = slope * x + intercept
+    ss_res = np.sum((y - y_pred) ** 2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    if ss_tot < 1e-10:
+        return 0.0
+    r2 = 1.0 - ss_res / ss_tot
+    return max(0.0, r2)  # Clip to [0, 1]
+
+
+def _trend_slope(prices):
+    """Normalized linear regression slope."""
+    if len(prices) < 3:
+        return 0.0
+    x = np.arange(len(prices), dtype=float)
+    slope = np.polyfit(x, prices, 1)[0]
+    return _safe_div(slope, np.mean(prices))  # Normalize by mean price
+
+
+def _bollinger_position(prices, window):
+    """Position within Bollinger Bands [0, 1]."""
+    if len(prices) < window:
+        return 0.5
+    recent = prices[-window:]
+    mean = np.mean(recent)
+    std = np.std(recent)
+    if std < 1e-10:
+        return 0.5
+    upper = mean + 2 * std
+    lower = mean - 2 * std
+    rng = upper - lower
+    if rng < 1e-10:
+        return 0.5
+    return np.clip((prices[-1] - lower) / rng, 0.0, 1.0)

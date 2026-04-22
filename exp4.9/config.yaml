@@ -1,0 +1,67 @@
+# Exp4.9: Regime-Conditioned LESR Configuration
+
+# Data configuration
+data:
+  pickle_file: "data/stock_data_exp4_7.pkl"
+
+# Experiment configuration
+experiment:
+  tickers:
+    - TSLA
+    - MSFT
+
+  train_period: ["2018-01-01", "2020-12-31"]
+  val_period: ["2021-01-01", "2022-12-31"]
+  test_period: ["2023-01-01", "2023-12-31"]
+
+  sample_count: 6
+  max_iterations: 3
+  init_min_valid: 3
+  init_max_rounds: 5
+
+# LLM configuration
+llm:
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 2000
+  base_url: "https://api.chatanywhere.com.cn/v1"
+  api_key: "sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL"
+
+# DQN training parameters (UNCHANGED from 4.7)
+dqn:
+  state_dim: 120       # Will be auto-adjusted based on LLM output
+  action_dim: 3
+  hidden_dim: 256
+  batch_size: 64
+  gamma: 0.99
+  tau: 0.005
+  lr: 0.001
+  epsilon_start: 1.0
+  epsilon_end: 0.1
+  epsilon_decay: 0.995
+  max_episodes: 50
+
+# Intrinsic reward parameters
+intrinsic:
+  weight: 0.02
+
+# Regime detection parameters (NEW in 4.9)
+regime:
+  enabled: true
+  # Safety net rules
+  safety_net:
+    crisis_threshold: 0.7       # crisis_signal > this → block BUY
+    high_vol_threshold: 0.85    # volatility_regime > this + downtrend → block BUY
+    max_consecutive_losses: 3   # After N consecutive losses → cooling period
+
+# Backtest configuration
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  min_commission: 0.99
+
+# Output configuration
+output:
+  output_dir: "exp4.9/results"
+  log_dir: "exp4.9/logs"
+  save_results: true

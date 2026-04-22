@@ -20,8 +20,8 @@ class SinopacDownloader:
         if api is None:
             self.api = sj.Shioaji()
             self.api.login(
-                api_key="3Tn2BbtCzbaU1KSy8yyqLa4m7LEJJyhkRCDrK2nknbcu",
-                secret_key="Epakqh1Nt4inC3hsqowE2XjwQicPNzswkuLjtzj2WKpR",
+                api_key=os.environ.get("SINOPAC_API_KEY", ""),
+                secret_key=os.environ.get("SINOPAC_SECRET_KEY", ""),
                 contracts_cb=lambda security_type: print(
                     f"{repr(security_type)} fetch done."
                 ),

@@ -1,0 +1,491 @@
+
+We trained DQN policies using 4 different state representation and intrinsic reward function combinations.
+
+Training Results:
+========== Code Candidate -- 1 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average (SMA)."""
+    if len(prices) < window:
+        return np.nan
+    return np.mean(prices[-window:])
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average (EMA)."""
+    if len(prices) < window:
+        return np.nan
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[window - 1] = np.mean(prices[:window])
+    for i in range(window, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema[-1]
+
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index (RSI)."""
+    if len(prices) < period:
+        return np.nan
+    deltas = np.diff(prices)
+    gain = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else 0
+    loss = -np.mean(deltas[deltas < 0]) if np.any(deltas < 0) else 0
+    rs = gain / loss if loss != 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, period=14):
+    """Calculate Average True Range (ATR)."""
+    if len(highs) < period:
+        return np.nan
+    tr = np.maximum.reduce([
+        highs[-period:] - lows[-period:], 
+        np.abs(highs[-period:] - closes[-period:]), 
+        np.abs(lows[-period:] - closes[-period:])
+    ])
+    return np.mean(tr)
+
+def calculate_macd(prices):
+    """Calculate MACD (Moving Average Convergence Divergence)."""
+    ema12 = calculate_ema(prices, 12)
+    ema26 = calculate_ema(prices, 26)
+    return ema12 - ema26
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    enhanced_s = np.copy(s)
+
+    # Calculate additional technical indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    ema_5 = calculate_ema(closing_prices, 5)
+    rsi = calculate_rsi(closing_prices, 14)
+    atr = calculate_atr(high_prices, low_prices, closing_prices, 14)
+    macd = calculate_macd(closing_prices)
+
+    # Add new features to enhanced state
+    enhanced_s = np.concatenate((enhanced_s, [sma_5, sma_10, ema_5, rsi, atr, macd]))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    closing_prices = enhanced_s[0:20]
+    recent_return = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] * 100  # Current return in percent
+    historical_volatility = np.std(np.diff(closing_prices) / closing_prices[:-1] * 100)  # Historical volatility
+    threshold = 2 * historical_volatility  # 2x historical volatility as threshold
+
+    reward = 0
+    
+    # Determine reward based on recent return and volatility
+    if recent_return > threshold:
+        reward += 50  # Strong positive momentum
+    elif recent_return < -threshold:
+        reward -= 50  # Strong negative momentum
+
+    # Adjust reward based on RSI
+    rsi = enhanced_s[-3]  # Assuming RSI is the third last new feature
+    if rsi < 30:  # Oversold condition
+        reward += 25
+    elif rsi > 70:  # Overbought condition
+        reward -= 25
+
+    # Reward for MACD - positive momentum confirmation
+    macd = enhanced_s[-1]  # MACD is the last feature
+    if macd > 0:  # Positive MACD
+        reward += 10
+    elif macd < 0:  # Negative MACD
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within [-100, 100]
+Performance Metrics:
+  Sharpe Ratio: 0.925
+  Max Drawdown: 39.12%
+  Total Return: 66.20%
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_4: importance=0.025, corr=0.047
+  new_feature_1: importance=0.024, corr=0.044
+  new_feature_3: importance=0.023, corr=0.045
+
+========== Code Candidate -- 2 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average (SMA)."""
+    if len(prices) < window:
+        return np.nan
+    return np.mean(prices[-window:])
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average (EMA)."""
+    if len(prices) < window:
+        return np.nan
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[window - 1] = np.mean(prices[:window])
+    for i in range(window, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema[-1]
+
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index (RSI)."""
+    if len(prices) < period:
+        return np.nan
+    deltas = np.diff(prices)
+    gain = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else 0
+    loss = -np.mean(deltas[deltas < 0]) if np.any(deltas < 0) else 0
+    rs = gain / loss if loss > 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, period=14):
+    """Calculate Average True Range (ATR)."""
+    if len(highs) < period:
+        return np.nan
+    tr = np.maximum(highs[-period:] - lows[-period:], 
+                    np.abs(highs[-period:] - closes[-period:]), 
+                    np.abs(lows[-period:] - closes[-period:]))
+    return np.mean(tr)
+
+def calculate_macd(prices):
+    """Calculate MACD (Moving Average Convergence Divergence)."""
+    ema12 = calculate_ema(prices, 12)
+    ema26 = calculate_ema(prices, 26)
+    return ema12 - ema26
+
+def calculate_volume_change(volumes):
+    """Calculate volume change percentage."""
+    if len(volumes) < 2:
+        return np.nan
+    return (volumes[-1] - volumes[-2]) / volumes[-2] * 100
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    enhanced_s = np.copy(s)
+
+    # Calculate additional technical indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    ema_5 = calculate_ema(closing_prices, 5)
+    rsi = calculate_rsi(closing_prices)
+    atr = calculate_atr(high_prices, low_prices, closing_prices)
+    macd = calculate_macd(closing_prices)
+    volume_change = calculate_volume_change(volumes)
+
+    # Add new features to enhanced state
+    enhanced_s = np.concatenate((enhanced_s, [sma_5, sma_10, ema_5, rsi, atr, macd, volume_change]))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    closing_prices = enhanced_s[0:20]
+    recent_return = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] * 100  # Current return in percent
+    historical_volatility = np.std(np.diff(closing_prices) / closing_prices[:-1])  # Historical volatility
+
+    # Calculate adaptive thresholds
+    upper_threshold = 2 * historical_volatility  # 2x historical volatility as upper threshold
+    lower_threshold = -upper_threshold  # Inverse for lower threshold
+
+    reward = 0
+
+    # Determine reward based on recent return relative to historical volatility
+    if recent_return > upper_threshold:
+        reward += 50  # Strong positive momentum
+    elif recent_return < lower_threshold:
+        reward -= 50  # Strong negative momentum
+
+    # Adjust reward based on RSI
+    rsi = enhanced_s[-5]  # Assuming RSI is the fifth last new feature
+    if rsi < 30:  # Oversold condition
+        reward += 25
+    elif rsi > 70:  # Overbought condition
+        reward -= 25
+
+    # Reward based on volume confirmation
+    volume_change = enhanced_s[-1]  # Assuming volume change is the last feature
+    if volume_change > 10:  # Significant increase in volume
+        reward += 10  # Further confirmation of trend
+    elif volume_change < -10:  # Significant decrease in volume
+        reward -= 10  # Caution against potential trend reversal
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within [-100, 100]
+Performance Metrics:
+  Sharpe Ratio: 0.925
+  Max Drawdown: 39.12%
+  Total Return: 66.20%
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_6: importance=0.036, corr=0.067
+  new_feature_4: importance=0.026, corr=0.049
+  new_feature_3: importance=0.024, corr=0.046
+
+========== Code Candidate -- 3 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average (SMA)."""
+    return np.mean(prices[-window:]) if len(prices) >= window else np.nan
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average (EMA)."""
+    if len(prices) < window:
+        return np.nan
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[window - 1] = np.mean(prices[:window])
+    for i in range(window, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema[-1]
+
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index (RSI)."""
+    if len(prices) < period:
+        return np.nan
+    deltas = np.diff(prices)
+    gain = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else 0
+    loss = -np.mean(deltas[deltas < 0]) if np.any(deltas < 0) else 0
+    rs = gain / loss if loss > 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_macd(prices):
+    """Calculate MACD (Moving Average Convergence Divergence)."""
+    ema12 = calculate_ema(prices, 12)
+    ema26 = calculate_ema(prices, 26)
+    return ema12 - ema26
+
+def calculate_atr(highs, lows, closes, period=14):
+    """Calculate Average True Range (ATR)."""
+    if len(highs) < period:
+        return np.nan
+    tr = np.maximum(highs[-period:] - lows[-period:], 
+                    np.maximum(np.abs(highs[-period:] - closes[-period:]), 
+                               np.abs(lows[-period:] - closes[-period:])))
+    return np.mean(tr)
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    # Enhanced state representation
+    enhanced_s = np.copy(s)
+
+    # Calculate technical indicators
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    ema_5 = calculate_ema(closing_prices, 5)
+    rsi = calculate_rsi(closing_prices)
+    macd = calculate_macd(closing_prices)
+    atr = calculate_atr(high_prices, low_prices, closing_prices)
+
+    # Append the new features to the state
+    enhanced_s = np.concatenate((enhanced_s, [sma_5, sma_10, ema_5, rsi, macd, atr]))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    closing_prices = enhanced_s[0:20]
+    recent_return = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] * 100
+    historical_volatility = np.std(np.diff(closing_prices) / closing_prices[:-1] * 100)
+
+    reward = 0
+
+    # Calculate adaptive thresholds
+    upper_threshold = 2 * historical_volatility
+    lower_threshold = -upper_threshold
+
+    # Reward based on recent return relative to historical volatility
+    if recent_return > upper_threshold:
+        reward += 50  # Strong positive momentum
+    elif recent_return < lower_threshold:
+        reward -= 50  # Strong negative momentum
+
+    # Adjust reward based on RSI
+    rsi = enhanced_s[-3]  # Assuming RSI is the third last feature
+    if rsi < 30:  # Oversold condition
+        reward += 25
+    elif rsi > 70:  # Overbought condition
+        reward -= 25
+
+    # Volume confirmation (last feature is ATR)
+    avg_volume = np.mean(enhanced_s[80:100])  # Average volume
+    current_volume = enhanced_s[-1]  # Last value is ATR
+    if current_volume > avg_volume:
+        reward += 10  # Positive confirmation
+    elif current_volume < avg_volume:
+        reward -= 10  # Negative confirmation
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within [-100, 100]
+Performance Metrics:
+  Sharpe Ratio: 0.925
+  Max Drawdown: 39.12%
+  Total Return: 66.20%
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_5: importance=0.037, corr=0.061
+  new_feature_3: importance=0.034, corr=0.060
+  new_feature_1: importance=0.032, corr=0.057
+
+========== Code Candidate -- 4 ==========
+import numpy as np
+
+def calculate_sma(prices, window):
+    """Calculate Simple Moving Average (SMA)."""
+    if len(prices) < window:
+        return np.nan
+    return np.mean(prices[-window:])
+
+def calculate_ema(prices, window):
+    """Calculate Exponential Moving Average (EMA)."""
+    if len(prices) < window:
+        return np.nan
+    alpha = 2 / (window + 1)
+    ema = np.zeros(len(prices))
+    ema[window - 1] = np.mean(prices[:window])
+    for i in range(window, len(prices)):
+        ema[i] = (prices[i] - ema[i - 1]) * alpha + ema[i - 1]
+    return ema[-1]
+
+def calculate_rsi(prices, period=14):
+    """Calculate Relative Strength Index (RSI)."""
+    if len(prices) < period:
+        return np.nan
+    deltas = np.diff(prices)
+    gain = np.mean(deltas[deltas > 0]) if np.any(deltas > 0) else 0
+    loss = -np.mean(deltas[deltas < 0]) if np.any(deltas < 0) else 0
+    rs = gain / loss if loss > 0 else 0
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(highs, lows, closes, period=14):
+    """Calculate Average True Range (ATR)."""
+    if len(highs) < period:
+        return np.nan
+    tr = np.maximum(highs[-period:] - lows[-period:], 
+                    np.abs(highs[-period:] - closes[-period:]), 
+                    np.abs(lows[-period:] - closes[-period:]))
+    return np.mean(tr)
+
+def calculate_macd(prices):
+    """Calculate MACD (Moving Average Convergence Divergence)."""
+    ema12 = calculate_ema(prices, 12)
+    ema26 = calculate_ema(prices, 26)
+    return ema12 - ema26
+
+def calculate_volume_change(volumes):
+    """Calculate percentage change in volume."""
+    if len(volumes) < 2:
+        return np.nan
+    return (volumes[-1] - volumes[-2]) / volumes[-2] * 100 if volumes[-2] != 0 else 0
+
+def revise_state(s):
+    closing_prices = s[0:20]
+    high_prices = s[40:60]
+    low_prices = s[60:80]
+    volumes = s[80:100]
+
+    enhanced_s = np.copy(s)
+
+    # Calculate new features
+    sma_5 = calculate_sma(closing_prices, 5)
+    sma_10 = calculate_sma(closing_prices, 10)
+    ema_5 = calculate_ema(closing_prices, 5)
+    rsi = calculate_rsi(closing_prices, 14)
+    atr = calculate_atr(high_prices, low_prices, closing_prices, 14)
+    macd = calculate_macd(closing_prices)
+    volume_change = calculate_volume_change(volumes)
+
+    # Add new features to enhanced state
+    enhanced_s = np.concatenate((enhanced_s, [sma_5, sma_10, ema_5, rsi, atr, macd, volume_change]))
+
+    return enhanced_s
+
+def intrinsic_reward(enhanced_s):
+    closing_prices = enhanced_s[0:20]
+    recent_return = (closing_prices[-1] - closing_prices[-2]) / closing_prices[-2] * 100  # Current return in percent
+    historical_volatility = np.std(np.diff(closing_prices) / closing_prices[:-1])  # Historical volatility
+    threshold = 2 * historical_volatility  # 2x historical volatility as threshold
+
+    reward = 0
+
+    # Determine reward based on recent return and volatility
+    if recent_return > threshold:
+        reward += 50  # Strong positive momentum
+    elif recent_return < -threshold:
+        reward -= 50  # Strong negative momentum
+
+    # Adjust reward based on RSI
+    rsi = enhanced_s[-5]  # Assuming RSI is the fifth last new feature
+    if rsi < 30:  # Oversold condition
+        reward += 25
+    elif rsi > 70:  # Overbought condition
+        reward -= 25
+
+    # Volume confirmation
+    volume_change = enhanced_s[-1]  # Volume change is the last feature
+    if volume_change > 5:  # Significant volume increase
+        reward += 10
+    elif volume_change < -5:  # Significant volume decrease
+        reward -= 10
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within [-100, 100]
+Performance Metrics:
+  Sharpe Ratio: 0.925
+  Max Drawdown: 39.12%
+  Total Return: 66.20%
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_6: importance=0.223, corr=0.401
+  new_feature_4: importance=0.084, corr=0.166
+  new_feature_1: importance=0.080, corr=0.157
+
+
+
+Please analyze the results above and provide improvement suggestions:
+
+Analysis Points:
+(a) Why do certain codes perform better? Which features contribute most?
+(b) What are the common problems of low-performance codes? (e.g., redundant features, overfitting, missing key signals)
+(c) How to improve state representation and intrinsic reward design?
+
+Financial Scene Special Notes:
+- Trend features (momentum, moving averages) are important for timing
+- Volatility features help with risk control
+- Volume can confirm price trends
+- intrinsic_reward should give positive values when trend is clear, negative when sideways
+- **Use relative thresholds based on historical volatility** - different stocks have different risk profiles
+
+Goal: Improve the strategy's Sharpe ratio while keeping maximum drawdown under 30%.

@@ -1,0 +1,59 @@
+{
+  "best_train_sharpe": 1.8345081928894797,
+  "best_iteration": 1,
+  "iterations": 2,
+  "history": [
+    {
+      "iteration": 1,
+      "n_samples": 3,
+      "best_sample_idx": 2,
+      "reward_rules": [
+        "penalize_concentration",
+        "penalize_turnover",
+        "reward_diversification",
+        "momentum_alignment"
+      ],
+      "lambda": 0.7,
+      "sharpe": 1.8345081928894797,
+      "max_drawdown": 42.01536425155319,
+      "total_return": 137.3729404757177,
+      "ic_profile": {
+        "120": "0.0000",
+        "121": "-0.0487",
+        "122": "-0.0916",
+        "123": "0.1224",
+        "124": "0.0533",
+        "125": "0.0000",
+        "126": "0.0771",
+        "127": "0.0000",
+        "128": "0.0000"
+      }
+    },
+    {
+      "iteration": 2,
+      "n_samples": 2,
+      "best_sample_idx": 1,
+      "reward_rules": [
+        "penalize_concentration",
+        "penalize_turnover",
+        "reward_diversification",
+        "momentum_alignment"
+      ],
+      "lambda": 0.7,
+      "sharpe": 1.7276973474581863,
+      "max_drawdown": 43.040956192136015,
+      "total_return": 86.47774525749432,
+      "ic_profile": {
+        "120": "0.0000",
+        "121": "-0.0487",
+        "122": "-0.0916",
+        "123": "0.1224",
+        "124": "0.0533",
+        "125": "0.0000",
+        "126": "0.0771",
+        "127": "0.0000",
+        "128": "0.0000"
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "iteration": 5,
+  "n_samples": 3,
+  "best_sample_idx": 1,
+  "reward_rules": [
+    "penalize_concentration",
+    "penalize_turnover",
+    "reward_diversification",
+    "momentum_alignment"
+  ],
+  "lambda": 0.7,
+  "sharpe": -0.7680378112835629,
+  "max_drawdown": 99.99999279128446,
+  "total_return": -20.232381394136734,
+  "ic_profile": {
+    "120": "0.0000",
+    "121": "-0.0698",
+    "122": "-0.0705",
+    "123": "0.0188",
+    "124": "0.0151",
+    "125": "0.0000",
+    "126": "0.0478",
+    "127": "0.0000",
+    "128": "0.0000"
+  }
+}

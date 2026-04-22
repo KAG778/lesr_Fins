@@ -67,9 +67,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Feature library: 20+ indicators in pure NumPy, INDICATOR_REGISTRY, closure-based assembler, Z-score normalization (LESR-01, LESR-02)
-- [ ] 03-02-PLAN.md -- Prompt rewrite (JSON mode), validation pipeline, feature screening (IC/variance gates), stability assessment across sub-periods (LESR-01, LESR-02, LESR-04, LESR-05)
-- [ ] 03-03-PLAN.md -- Controller integration (JSON-mode loop), COT feedback with negative guidance, fixed reward rules, leakage activation, lesr_strategy fix (LESR-01, LESR-03)
+- [x] 03-01-PLAN.md -- Feature library: 20+ indicators in pure NumPy, INDICATOR_REGISTRY, closure-based assembler, Z-score normalization (LESR-01, LESR-02)
+- [x] 03-02-PLAN.md -- Prompt rewrite (JSON mode), validation pipeline, feature screening (IC/variance gates), stability assessment across sub-periods (LESR-01, LESR-02, LESR-04, LESR-05)
+- [x] 03-03-PLAN.md -- Controller integration (JSON-mode loop), COT feedback with negative guidance, fixed reward rules, leakage activation, lesr_strategy fix (LESR-01, LESR-03)
 
 ## Progress
 
@@ -81,3 +81,17 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | 1. Diagnosis Infrastructure | 3/3 | Complete | 2026-04-14 |
 | 2. Evaluation Framework Redesign | 3/3 | Complete | 2026-04-15 |
 | 3. LESR Core Improvements | 0/3 | Planned | - |
+
+### Phase 4: 组合优化_ppo结构重构 — LLM代码生成 + IC反馈 + 内在奖励
+
+**Goal:** 按设计规范将现有组合优化_ppo项目从JSON选择模式重构为LLM代码生成模式，与原始LESR方法论对齐。LLM生成revise_state和intrinsic_reward Python代码，通过code_sandbox安全验证，IC分析提供COT反馈。
+**Design Docs:**
+- `docs/superpowers/specs/2026-04-17-lesr-portfolio-refactor-design.md` — 结构重构设计（Approach B）
+- `docs/superpowers/plans/2026-04-17-portfolio-optimization-ppo.md` — 原始13-Task实现计划（已完成基础搭建）
+**Baseline code:** 组合优化_ppo/core/（已有12个文件，需重构其中6个 + 新增2个）
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 4 to break down)
+

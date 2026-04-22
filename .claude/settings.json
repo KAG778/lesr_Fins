@@ -1,41 +1,20 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(python3 exp4.7/prepare_data.py --mode exp4.7)",
-      "Bash(chmod +x /home/wangmeiyi/AuctionNet/lesr/exp4.7/run.sh)",
-      "mcp__web-search-prime__web_search_prime",
-      "Bash(curl -s -m 10 https://api.chatanywhere.cn/v1/models -H \"Authorization: Bearer sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL\")",
-      "Bash(curl -s -m 10 https://api.chatanywhere.com.cn/v1/models -H \"Authorization: Bearer sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL\")",
-      "Read(//home/wangmeiyi/AuctionNet/lesr/**)",
-      "Bash(chmod +x /home/wangmeiyi/AuctionNet/lesr/exp4.7/monitor_and_fix.sh)",
-      "Bash(pkill -9 -f \"main_simple.py\")",
-      "Bash(pkill -9 -f \"train_baseline.py\")",
-      "Bash(kill 3288272)",
-      "Bash(cat results/iteration_*/results.pkl)",
-      "Bash(python -m py_compile results/it0_sample0.py)",
-      "Bash(python)",
-      "Bash(grep -nE \"Test Set|test_period|Final Comparison|summary saved|Results saved\" main.py main_simple.py run_new.log logs/*.log)",
-      "Bash(python -)",
-      "Bash(python -m py_compile baseline.py)",
-      "Bash(python -m pytest -q test_baseline_import.py)",
-      "Bash(python test_baseline_import.py)",
-      "Bash(python -m py_compile run_test_set_eval.py baseline.py main_simple.py)",
-      "Bash(pip install:*)",
-      "Bash(ps -p 3718610 -o pid,etime,cmd)",
-      "Bash(ps -p 3721582 -o pid,etime,cmd)",
-      "Bash(python -m py_compile run_test_set_eval.py)",
-      "Bash(ps -p 54028 -o pid,etime,cmd)",
-      "Bash(python test_it1_sample1_runtime.py)",
-      "Bash(python -m py_compile results/it1_sample1.py)",
-      "Bash(python -m py_compile run_test_set_eval_tsla.py results/it1_sample1.py)",
-      "Bash(python -m py_compile run_test_set_eval_tsla.py)",
-      "Bash(git init:*)",
-      "Bash(git branch:*)",
-      "Bash(git add:*)"
-    ],
-    "additionalDirectories": [
-      "/home/wangmeiyi/AuctionNet/lesr/exp4.7/results",
-      "/home/wangmeiyi/AuctionNet/lesr/FINSABER/.git"
-    ]
-  }
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "codex_525519c776ebad02f6badcf03efbea087968afff6c8ab2bc",
+    "ANTHROPIC_BASE_URL": "https://codex.miaomiaocode.com",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6"
+  },
+  "model": "claude-sonnet-4-6",
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "pua-skills": {
+      "source": {
+        "source": "github",
+        "repo": "tanweai/pua"
+      }
+    }
+  },
+  "skipDangerousModePermissionPrompt": true
 }

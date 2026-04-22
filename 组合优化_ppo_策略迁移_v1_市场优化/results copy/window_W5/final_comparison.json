@@ -1,0 +1,56 @@
+{
+  "transfer_strategy": "V1_code_retrain",
+  "retrain_period": [
+    "2022-07-01",
+    "2022-12-29"
+  ],
+  "eval_period": [
+    "2022-12-30",
+    "2023-06-30"
+  ],
+  "test_result": {
+    "test_sharpe": 3.112628360924426,
+    "test_sortino": 3.490441137726767,
+    "test_max_drawdown": 8.59112056143078,
+    "test_calmar": 5.576939022027582,
+    "test_total_return": 21.248805455880593,
+    "test_avg_weights": {
+      "TSLA": 0.08673767000436783,
+      "NFLX": 0.14122973382472992,
+      "AMZN": 0.13002543151378632,
+      "MSFT": 0.16947542130947113,
+      "JNJ": 0.23840488493442535,
+      "CASH": 0.23412686586380005
+    }
+  },
+  "baseline1_test_only": {
+    "baseline_sharpe": 2.8319183598217657,
+    "baseline_sortino": 3.2490778255044304,
+    "baseline_max_drawdown": 9.72045506002704,
+    "baseline_calmar": 4.891568507439243,
+    "baseline_total_return": 20.955556878264247,
+    "baseline_avg_weights": {
+      "TSLA": 0.0819912701845169,
+      "NFLX": 0.1915907859802246,
+      "AMZN": 0.11389254033565521,
+      "MSFT": 0.21525254845619202,
+      "JNJ": 0.20637725293636322,
+      "CASH": 0.19089554250240326
+    }
+  },
+  "baseline2_train_plus_test": {
+    "base2_sharpe": 2.281439942963755,
+    "base2_sortino": 2.728560623793728,
+    "base2_max_drawdown": 11.405032168196334,
+    "base2_calmar": 3.593674900141182,
+    "base2_total_return": 17.63171345794934,
+    "base2_avg_weights": {
+      "TSLA": 0.03696132078766823,
+      "NFLX": 0.24574749171733856,
+      "AMZN": 0.10602360218763351,
+      "MSFT": 0.2400965541601181,
+      "JNJ": 0.15443155169487,
+      "CASH": 0.2167394757270813
+    }
+  }
+}

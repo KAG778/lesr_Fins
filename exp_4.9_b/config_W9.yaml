@@ -1,0 +1,49 @@
+backtest:
+  commission: 0.001
+  initial_cash: 100000
+  min_commission: 0.99
+data:
+  pickle_file: data/finmem_data/stock_data_4stocks_2008_2013.pkl
+dqn:
+  action_dim: 3
+  batch_size: 64
+  epsilon_decay: 0.995
+  epsilon_end: 0.1
+  epsilon_start: 1.0
+  gamma: 0.99
+  hidden_dim: 256
+  lr: 0.001
+  max_episodes: 50
+  state_dim: 120
+  tau: 0.005
+experiment:
+  init_max_rounds: 5
+  init_min_valid: 3
+  max_iterations: 3
+  sample_count: 6
+  test_period:
+  - '2013-01-01'
+  - '2013-12-31'
+  tickers:
+  - TSLA
+  - NFLX
+  - AMZN
+  - MSFT
+  train_period:
+  - '2008-01-01'
+  - '2010-12-31'
+  val_period:
+  - '2011-01-01'
+  - '2012-12-31'
+intrinsic:
+  weight: 0.1
+llm:
+  api_key: sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL
+  base_url: https://api.chatanywhere.com.cn/v1
+  max_tokens: 3000
+  model: gpt-4o-mini
+  temperature: 0.7
+output:
+  log_dir: logs
+  output_dir: exp_4.9_b/result_W9_test2013
+  save_results: true

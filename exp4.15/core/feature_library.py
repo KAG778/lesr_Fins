@@ -1060,7 +1060,6 @@ def screen_features(selection: list, revise_fn, training_states: np.ndarray,
 
     # Keep top 5-10
     screened = deduped[:MAX_FEATURES]
-
     # Rebuild ranked_metrics to match screened order
     final_metrics = {}
     for item in screened:

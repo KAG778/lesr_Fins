@@ -1,0 +1,18 @@
+========================================
+exp4.9_d 监控 2026-04-10 00:50:47
+========================================
+运行中: 10/10
+
+W1: 训练 | Iteration 0 | Training sample 3/6 | Episode 35/50 | Trades: 250
+W2: 训练 | Iteration 0 | Training sample 3/6 | Episode 48/50 | Trades: 251
+W3: 训练 | Iteration 0 | Training sample 3/6 | Episode 33/50 | Trades: 250
+W4: 训练 | Iteration 0 | Training sample 3/6 | Episode 48/50 | Trades: 249
+W5: 训练 | Iteration 0 | Training sample 3/6 | Episode 38/50 | Trades: 248
+W6: 训练 | Iteration 0 | Training sample 3/6 | Episode 33/50 | Trades: 230
+W7: 训练 | Iteration 0 | Training sample 3/6 | Episode 41/50 | Trades: 244
+W8: 训练 | Iteration 0 | Training sample 3/6 | Episode 34/50 | Trades: 266
+W9: 训练 | Iteration 0 | Training sample 3/6 | Episode 33/50 | Trades: 246
+W10: 训练 | Iteration 0 | Training sample 3/6 | Episode 32/50 | Trades: 258
+
+已完成:
+========================================

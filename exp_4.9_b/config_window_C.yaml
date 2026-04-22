@@ -1,0 +1,47 @@
+# 窗口C: 训练 2013-2015 | 验证 2016-2017 | 测试 2018
+
+data:
+  pickle_file: "data/finmem_data/stock_data_4stocks_2013_2018.pkl"
+
+experiment:
+  tickers: [TSLA, NFLX, AMZN, MSFT]
+  train_period: ["2013-01-01", "2015-12-31"]
+  val_period: ["2016-01-01", "2017-12-31"]
+  test_period: ["2018-01-01", "2018-12-31"]
+  sample_count: 6
+  max_iterations: 3
+  init_min_valid: 3
+  init_max_rounds: 5
+
+llm:
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 3000
+  base_url: "https://api.chatanywhere.com.cn/v1"
+  api_key: "sk-gtO2lC26gUwH8PeZpQVnf5HC5ZsI9ckTZBrtbafX0HdMaiwL"
+
+dqn:
+  state_dim: 120
+  action_dim: 3
+  hidden_dim: 256
+  batch_size: 64
+  gamma: 0.99
+  tau: 0.005
+  lr: 0.001
+  epsilon_start: 1.0
+  epsilon_end: 0.1
+  epsilon_decay: 0.995
+  max_episodes: 50
+
+intrinsic:
+  weight: 0.1
+
+backtest:
+  initial_cash: 100000
+  commission: 0.001
+  min_commission: 0.99
+
+output:
+  output_dir: "exp4.7/result_window_C_2013_2018"
+  log_dir: "logs"
+  save_results: true

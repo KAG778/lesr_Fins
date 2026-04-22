@@ -1,0 +1,697 @@
+
+We trained DQN policies using 6 different regime-conditioned state representations and intrinsic reward functions.
+
+Training Results:
+========== Code Candidate -- 1 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute features for trending regimes."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Short-term MA (5 days)
+    long_ma = np.mean(closing_prices[-20:])  # Long-term MA (20 days)
+    ma_crossover_distance = short_ma - long_ma
+
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute features for sideways regimes."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+    
+    if rolling_std != 0:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    else:
+        bollinger_percent_b = 0
+    
+    gains = np.where(np.diff(closing_prices) > 0, np.diff(closing_prices), 0)
+    losses = np.where(np.diff(closing_prices) < 0, -np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains[-14:])
+    avg_loss = np.mean(losses[-14:])
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100
+
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    
+    enhanced = np.concatenate([s, regime_vector])  # Base 125 dims
+    new_features = []
+
+    historical_volatility = compute_volatility(s[0:20])
+    
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+
+    # Include historical volatility as a feature
+    new_features = np.concatenate([new_features, [historical_volatility]])
+
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative for any entries during a crisis
+
+    # Determine reward based on regimes
+    if abs(trend_strength) > 0.3:  # TREND regime
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0 * trend_strength  # Positive reward aligned with trend
+        else:  # Downtrend
+            reward -= 25.0 * abs(trend_strength)  # Penalty for counter-trend entries
+    
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        bollinger_percent_b = enhanced_s[125]  # Assuming last feature is Bollinger %B
+        if bollinger_percent_b < 0.5:  # Mean-reversion condition
+            reward += 10.0  # Mild positive for mean-reversion signals
+        else:
+            reward -= 5.0  # Penalize for chasing breakouts
+
+    # High volatility penalty
+    if volatility_regime > 0.7:
+        reward -= 15.0  # Scale down rewards for aggressive positions
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: 0.086
+  Max Drawdown: 52.09%
+  Total Return: 15.62%
+
+Performance by Market Regime:
+  trend_up: Sharpe=3.15, Trades=54
+  crisis: Sharpe=-4.54, Trades=59
+  trend_down: Sharpe=2.82, Trades=28
+  sideways: Sharpe=1.50, Trades=53
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_1: importance=0.196, corr=0.124
+  new_feature_0: importance=0.105, corr=0.068
+  new_feature_2: importance=0.087, corr=0.058
+
+========== Code Candidate -- 2 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute features for trending regimes."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Short-term MA (5 days)
+    long_ma = np.mean(closing_prices[-20:])  # Long-term MA (20 days)
+    ma_crossover_distance = short_ma - long_ma
+    
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+    
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute features for sideways regimes."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+
+    if rolling_std != 0:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    else:
+        bollinger_percent_b = 0
+    
+    gains = np.where(np.diff(closing_prices) > 0, np.diff(closing_prices), 0)
+    losses = np.where(np.diff(closing_prices) < 0, -np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains[-14:])
+    avg_loss = np.mean(losses[-14:])
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100
+
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    
+    enhanced = np.concatenate([s, regime_vector])  # base 125 dims
+    historical_volatility = compute_volatility(s[0:20])  # Historical volatility for adaptive thresholds
+
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+    else:  # Neutral or uncertain regime
+        new_features = np.array([0, 0])  # Neutral features
+
+    # Add historical volatility as a feature
+    new_features = np.concatenate([new_features, [historical_volatility]])
+    
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative reward for any entries during a crisis
+
+    # TREND regime
+    if abs(trend_strength) > 0.3:
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0 * trend_strength  # Reward for aligning with uptrend
+        else:  # Downtrend
+            reward -= 25.0 * abs(trend_strength)  # Penalty for counter-trend entries
+
+    # SIDEWAYS regime
+    elif abs(trend_strength) < 0.15:
+        bollinger_percent_b = enhanced_s[125]  # Assuming this is Bollinger %B
+        if bollinger_percent_b < 0.5:
+            reward += 10.0  # Positive reward for mean-reversion potential
+        else:
+            reward -= 5.0  # Mild penalty for chasing breakouts
+    
+    # High volatility penalty
+    if volatility_regime > 0.7:
+        reward -= 15.0  # Scale down rewards for aggressive positions
+    
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: 0.227
+  Max Drawdown: 68.94%
+  Total Return: 25.02%
+
+Performance by Market Regime:
+  trend_up: Sharpe=3.87, Trades=33
+  crisis: Sharpe=-4.93, Trades=33
+  trend_down: Sharpe=3.67, Trades=20
+  sideways: Sharpe=2.20, Trades=39
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_1: importance=0.198, corr=0.124
+  new_feature_0: importance=0.158, corr=0.182
+  new_feature_2: importance=0.146, corr=0.213
+
+========== Code Candidate -- 3 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute features for trending regimes."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Short-term MA (5 days)
+    long_ma = np.mean(closing_prices[-20:])  # Long-term MA (20 days)
+    ma_crossover_distance = short_ma - long_ma
+
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute features for sideways regimes."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+
+    if rolling_std != 0:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    else:
+        bollinger_percent_b = 0
+    
+    gains = np.where(np.diff(closing_prices) > 0, np.diff(closing_prices), 0)
+    losses = np.where(np.diff(closing_prices) < 0, -np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains[-14:])
+    avg_loss = np.mean(losses[-14:])
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100
+
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    
+    enhanced = np.concatenate([s, regime_vector])  # base 125 dims
+    historical_volatility = compute_volatility(s[0:20])
+
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+    else:
+        new_features = np.array([0, 0])  # Neutral features for uncertain regimes
+
+    # Include historical volatility as a feature
+    new_features = np.concatenate([new_features, [historical_volatility]])
+    
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative in crisis
+
+    # Determine reward based on regime
+    if abs(trend_strength) > 0.3:  # TREND regime
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0  # Reward for positive momentum
+        else:  # Downtrend
+            reward -= 25.0  # Penalty for counter-trend entries
+    
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        bollinger_percent_b = enhanced_s[125]  # Assuming this is the Bollinger %B feature
+        if bollinger_percent_b < 0.5:  # Mean-reversion condition
+            reward += 10.0  # Positive reward for mean-reversion
+        else:
+            reward -= 5.0  # Penalize for chasing breakouts
+
+    # Volatility adjustment
+    if volatility_regime > 0.7:  # HIGH_VOL regime
+        reward -= 15.0  # Penalize aggressive entries
+    
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: 0.007
+  Max Drawdown: 62.09%
+  Total Return: 4.00%
+
+Performance by Market Regime:
+  trend_up: Sharpe=3.93, Trades=71
+  crisis: Sharpe=-6.13, Trades=50
+  trend_down: Sharpe=2.72, Trades=23
+  sideways: Sharpe=1.82, Trades=68
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_2: importance=0.202, corr=0.215
+  new_feature_1: importance=0.190, corr=0.123
+  new_feature_0: importance=0.182, corr=0.181
+
+========== Code Candidate -- 4 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute features for trending regimes."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Short-term MA (5 days)
+    long_ma = np.mean(closing_prices[-20:])  # Long-term MA (20 days)
+    ma_crossover_distance = short_ma - long_ma
+
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute features for sideways regimes."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+
+    if rolling_std != 0:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    else:
+        bollinger_percent_b = 0
+    
+    gains = np.where(np.diff(closing_prices) > 0, np.diff(closing_prices), 0)
+    losses = np.where(np.diff(closing_prices) < 0, -np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains)
+    avg_loss = np.mean(losses)
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100
+
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    enhanced = np.concatenate([s, regime_vector])  # base 125 dims
+    new_features = []
+
+    historical_volatility = compute_volatility(s[0:20])  # Compute historical volatility
+
+    # Feature extraction based on regime
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+        
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+        
+    # Include historical volatility as a feature
+    new_features = np.concatenate([new_features, [historical_volatility]])
+    
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative for any entries during a crisis
+
+    # Determine reward based on regimes
+    if abs(trend_strength) > 0.3:  # TREND regime
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0 * trend_strength  # Reward positive momentum entries
+        else:  # Downtrend
+            reward -= 25.0 * abs(trend_strength)  # Penalize aggressive buys
+
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        bollinger_percent_b = enhanced_s[-1]  # Assuming last feature is Bollinger %B
+        if bollinger_percent_b < 0.5:  # Mean-reversion condition
+            reward += 10.0  # Positive for mean-reversion potential
+        else:
+            reward -= 5.0  # Penalize for chasing breakouts
+
+    # High volatility regime
+    if volatility_regime > 0.7:
+        reward -= 15.0  # Penalize aggressive entries in high volatility
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: 0.215
+  Max Drawdown: 43.03%
+  Total Return: 1.93%
+
+Performance by Market Regime:
+  trend_up: Sharpe=2.69, Trades=39
+  crisis: Sharpe=-4.89, Trades=24
+  trend_down: Sharpe=2.86, Trades=16
+  sideways: Sharpe=1.91, Trades=33
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_2: importance=0.149, corr=0.180
+  new_feature_0: importance=0.136, corr=0.131
+  new_feature_1: importance=0.124, corr=0.008
+
+========== Code Candidate -- 5 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute trend-following features."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Last 5 days
+    long_ma = np.mean(closing_prices[-20:])  # Last 20 days
+    ma_crossover_distance = short_ma - long_ma
+    
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute mean-reversion features."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+    
+    if rolling_std == 0:
+        bollinger_percent_b = 0
+    else:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    
+    gains = np.maximum(np.diff(closing_prices), 0)
+    losses = np.maximum(-np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains[-14:])
+    avg_loss = np.mean(losses[-14:])
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss)) if avg_loss != 0 else 1)
+    
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    enhanced = np.concatenate([s, regime_vector])  # base 125 dims
+
+    # Calculate historical volatility for adaptive thresholds
+    historical_volatility = compute_volatility(s[0:20])
+    
+    # Regime-specific features
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+    else:  # Neutral regime
+        new_features = np.array([0, 0])  # Placeholder features for uncertain regimes
+
+    # Include historical volatility
+    new_features = np.concatenate([new_features, [historical_volatility]])
+    
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative for any entries during a crisis
+
+    # Determine reward based on regimes
+    if abs(trend_strength) > 0.3:  # TREND regime
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0 * trend_strength  # Reward for aligning with uptrend
+        else:  # Downtrend
+            reward -= 20.0 * abs(trend_strength)  # Penalize aggressive buys
+
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        bollinger_percent_b = enhanced_s[125]  # Assuming this is the Bollinger %B feature
+        if bollinger_percent_b < 0.5:
+            reward += 10  # Positive reward for mean-reversion potential
+        else:
+            reward -= 5  # Penalize for chasing breakouts
+
+    # High volatility regime
+    if volatility_regime > 0.7:
+        reward -= 15  # Scale down rewards for aggressive positions
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: -0.320
+  Max Drawdown: 45.63%
+  Total Return: -10.33%
+
+Performance by Market Regime:
+  trend_up: Sharpe=2.61, Trades=56
+  crisis: Sharpe=-4.07, Trades=29
+  trend_down: Sharpe=1.35, Trades=25
+  sideways: Sharpe=1.18, Trades=42
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_1: importance=0.196, corr=0.124
+  new_feature_0: importance=0.157, corr=0.183
+  new_feature_2: importance=0.146, corr=0.213
+
+========== Code Candidate -- 6 ==========
+import numpy as np
+
+def compute_volatility(prices):
+    """Compute historical volatility based on closing prices."""
+    returns = np.diff(prices) / prices[:-1]  # Daily returns
+    return np.std(returns) * np.sqrt(252)  # Annualized volatility
+
+def compute_trend_features(s):
+    """Compute features for trending regimes."""
+    closing_prices = s[0:20]
+    short_ma = np.mean(closing_prices[-5:])  # Short-term MA (5 days)
+    long_ma = np.mean(closing_prices[-20:])  # Long-term MA (20 days)
+    ma_crossover_distance = short_ma - long_ma
+
+    returns = np.diff(closing_prices) / closing_prices[:-1]
+    trend_consistency = np.std(returns)
+
+    return np.array([ma_crossover_distance, trend_consistency])
+
+def compute_mean_reversion_features(s):
+    """Compute features for sideways regimes."""
+    closing_prices = s[0:20]
+    rolling_mean = np.mean(closing_prices)
+    rolling_std = np.std(closing_prices)
+
+    if rolling_std != 0:
+        bollinger_percent_b = (closing_prices[-1] - (rolling_mean - 2 * rolling_std)) / (4 * rolling_std)
+    else:
+        bollinger_percent_b = 0
+    
+    gains = np.where(np.diff(closing_prices) > 0, np.diff(closing_prices), 0)
+    losses = np.where(np.diff(closing_prices) < 0, -np.diff(closing_prices), 0)
+    avg_gain = np.mean(gains[-14:])
+    avg_loss = np.mean(losses[-14:])
+    rsi = 100 - (100 / (1 + (avg_gain / avg_loss))) if avg_loss != 0 else 100
+
+    return np.array([bollinger_percent_b, rsi])
+
+def revise_state(s, regime_vector):
+    trend_strength = regime_vector[0]
+    volatility_regime = regime_vector[1]
+    
+    enhanced = np.concatenate([s, regime_vector])  # base 125 dims
+    new_features = []
+
+    historical_volatility = compute_volatility(s[0:20])
+    
+    if abs(trend_strength) > 0.3:  # TREND regime
+        new_features = compute_trend_features(s)
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        new_features = compute_mean_reversion_features(s)
+    
+    # Add historical volatility for adaptive thresholds
+    new_features = np.concatenate([new_features, [historical_volatility]])
+    
+    return np.concatenate([enhanced, new_features])
+
+def intrinsic_reward(enhanced_s):
+    regime_vector = enhanced_s[120:125]
+    trend_strength = regime_vector[0]
+    crisis_signal = regime_vector[4]
+    volatility_regime = regime_vector[1]
+    
+    reward = 0.0
+    
+    # CRITICAL: Crisis override
+    if crisis_signal > 0.5:
+        return -100.0  # Strong negative for any entries during a crisis
+
+    # Determine reward based on regimes
+    if abs(trend_strength) > 0.3:  # TREND regime
+        if trend_strength > 0:  # Uptrend
+            reward += 50.0 * trend_strength  # Reward positive momentum entries
+        else:  # Downtrend
+            reward -= 20.0 * abs(trend_strength)  # Penalize aggressive buys
+
+    elif abs(trend_strength) < 0.15:  # SIDEWAYS regime
+        bollinger_percent_b = enhanced_s[125]  # Assuming this is the Bollinger %B feature
+        if bollinger_percent_b < 0.5:  # Mean-reversion potential
+            reward += 10.0  # Positive reward for mean-reversion signals
+        else:
+            reward -= 5.0  # Penalize for chasing breakouts
+
+    # High volatility regime
+    if volatility_regime > 0.7:
+        reward -= 15.0  # Scale down rewards for aggressive positions
+
+    return np.clip(reward, -100, 100)  # Ensure reward is within bounds
+Overall Performance Metrics:
+  Sharpe Ratio: -0.416
+  Max Drawdown: 45.31%
+  Total Return: -12.16%
+
+Performance by Market Regime:
+  trend_up: Sharpe=0.96, Trades=24
+  crisis: Sharpe=-3.65, Trades=14
+  trend_down: Sharpe=2.00, Trades=6
+  sideways: Sharpe=1.37, Trades=21
+
+Original Feature Importance (OHLCV):
+  s[0]: importance=0.000
+  s[1]: importance=0.000
+  s[2]: importance=0.000
+  s[3]: importance=0.000
+  s[4]: importance=0.000
+
+New Feature Importance (Top 3):
+  new_feature_1: importance=0.193, corr=0.124
+  new_feature_0: importance=0.104, corr=0.068
+  new_feature_2: importance=0.086, corr=0.058
+
+
+
+Please analyze the results and provide improvement suggestions:
+
+Analysis Points:
+(a) Which regimes does each code handle well? Which regimes does it fail in?
+(b) Which features are important in TREND vs SIDEWAYS vs CRISIS regimes?
+(c) How can the intrinsic_reward better adapt to different regimes?
+(d) Are there regime transitions the strategy misses?
+
+Regime-Specific Design Guidance:
+- **TREND regimes** (|trend_strength| > 0.3): Reward momentum-aligned entries, penalize counter-trend
+- **SIDEWAYS regimes** (|trend_strength| < 0.15): Reward mean-reversion signals, penalize breakout chases
+- **HIGH_VOL regimes** (volatility_regime > 0.7): Scale down all rewards, discourage aggressive positions
+- **CRISIS regimes** (crisis_signal > 0.5): Strong negative reward for BUY signals, mild positive for SELL/HOLD
+
+Goal: Improve the strategy's Sharpe ratio across ALL regimes while keeping maximum drawdown under 30%.
